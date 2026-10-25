@@ -18,6 +18,8 @@ References for the feel, not for copying: Apple's own apps (Notes, Mail, Finder)
 - `frontend-ui-engineering`: the list of habits that make a UI look machine-made, plus states and accessibility rules.
 - `apple-design` (dickwu/apple-design-skill, installed in `.claude/skills/apple-design`): the HIG reference with 123 pages. It is the review lens for every screen: each screen is checked against its pages on layout, typography, color, motion, accessibility and components before it is called done. Where it describes native controls, we apply the principle to the web equivalent.
 - `logo-design` (kaankiziltug/logo-design-skill, installed in `.claude/skills/logo-design`): the process for the mark (brief, concepts, audit, small-size checks, export kit). Its reference library is third-party trademarks and is never traced.
+- `shadcn` (shadcn-ui/ui skill): component conventions. Components live in `src/components/ui`, use `cva` variants, `cn()`, semantic tokens and `data-slot`. The shadcn CLI registry is not reachable from our build machine, so components are written by hand in the same style.
+- `motion-framer` (freshtechbro/claudedesignskills): animation with the `motion` package (`motion/react`). Rules in section 4.
 - `ui-ux-pro-max`: its pre-delivery checklist and process only. Its generated palette (indigo with a serif and sans pairing) is rejected, because indigo and purple are exactly the look we are avoiding.
 
 ## 3. Principles
@@ -35,26 +37,25 @@ All values live as CSS variables and Tailwind theme entries. Raw colours and pix
 
 ### Colour (light / dark)
 
+Token names follow shadcn semantics (`background`, `foreground`, `card`, `muted`, `primary`, ...). The neutrals are warm, like paper, so the green feels at home.
+
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| bg | #FFFFFF | #1C1C1E | Main surfaces |
-| bg-grouped | #F5F5F7 | #000000 | Page background behind grouped content |
-| surface-raised | #FFFFFF | #2C2C2E | Popovers, sheets, cards on grouped background |
-| sidebar | translucent #F5F5F7 | translucent #2C2C2E | Sidebar and toolbar material, with backdrop blur |
-| text | #1D1D1F | #F5F5F7 | Primary text |
-| text-secondary | #6E6E73 | #A1A1A6 | Supporting text |
-| text-tertiary | #86868B | #6E6E73 | Placeholders, disabled |
-| separator | rgba(0,0,0,0.10) | rgba(255,255,255,0.14) | Hairlines (0.5px where the screen allows) |
-| accent | #2B7A4B | #5FBF85 | Primary buttons, selection |
-| accent-text | #2B7A4B | #5FBF85 | Links and accent-coloured text |
-| on-accent | #FFFFFF | #0B2415 | Text on accent buttons |
-| success | #248A3D | #30D158 | Confirmations (always paired with text or icon) |
-| warning | #B25000 | #FF9F0A | Cautions |
-| danger | #D70015 | #FF453A | Destructive actions and errors |
+| background | #FBFAF6 | #161715 | Main surfaces |
+| muted | #F1EFE8 | #0F100E | Grouped background, chips, code wells |
+| card | #FFFFFF | #222421 | Cards, sheets, popovers |
+| foreground | #1D1D1B | #F3F2EC | Primary text |
+| muted-foreground | #66655E | #A6A59C | Supporting text |
+| subtle | #6C6B63 | #939289 | Placeholders, captions |
+| border | rgba(40,36,20,0.12) | rgba(255,255,240,0.13) | Hairlines |
+| primary | #2B7A4B | #5FBF85 | Buttons, links, selection |
+| primary-foreground | #FFFFFF | #0B2415 | Text on primary |
+| primary-soft | #E4F0E8 | #1E3326 | Tinted panels, avatars, badges |
+| destructive | #D70015 | #FF453A | Destructive actions and errors |
 
-Accent is a warm green chosen for a distinct identity. Measured contrast: white on #2B7A4B 5.27:1; #2B7A4B on #F5F5F7 4.84:1; #5FBF85 on #1C1C1E 7.52:1 and on #000 9.28:1; #0B2415 on #5FBF85 7.26:1. Every new colour pair is checked by script before use.
+Measured contrast (WCAG): foreground on background 16.2 and 16.0; muted-foreground on background 5.6 and 7.3, on muted 5.1 and 7.7; primary on background 5.0 and 8.0; white on primary 5.3; dark text on dark-mode primary 7.3; primary on primary-soft 4.5 and 6.0. Every new pair is checked by script before use.
 
-Rules: one accent only. No gradients. No colour as the only signal. Text contrast at least 4.5:1, large text and icons at least 3:1 (checked by script before delivery). The theme follows the system setting and can be overridden in settings.
+Rules: one accent only. No gradients. No colour as the only signal. Text contrast at least 4.5:1, large text and icons at least 3:1. The theme follows the system setting.
 
 ### Typography
 
@@ -84,6 +85,9 @@ Body text is left aligned everywhere. Only display titles and single call-to-act
 - Borders are hairlines. Shadows only on floating layers (popovers, sheets, command palette), soft and low opacity, never pure black at full strength.
 
 ### Motion
+
+Tools: the `motion` package for entrances, scroll reveals, shared-layout indicators (`layoutId`) and exits; CSS keyframes (`tw-animate-css`) for dialogs. Patterns in use: word-by-word headline rise, looping product illustration, scroll reveal with stagger, fence posts that grow in, an agent dot passing through the gate, spring-moving nav and tab indicators, page-to-page fade, list items entering in sequence. Everything respects reduced motion (`useReducedMotion` and a global media query).
+
 
 - Durations: 120ms (hover, press), 200ms (small reveals), 320ms (sheets and larger moves).
 - Curves: enter `cubic-bezier(0.2, 0, 0, 1)`; sheets `cubic-bezier(0.32, 0.72, 0, 1)`; exits are faster than enters.

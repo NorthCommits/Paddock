@@ -7,15 +7,22 @@ import { Suspense, useEffect, useState } from "react";
 import useSWR from "swr";
 import { ApiError, SCOPES, api } from "@/lib/api";
 import type { TokenCreated, TokenRow } from "@/lib/api";
-import { Badge, Button, CopyField, EmptyState, Field, Sheet, Skeleton } from "@/components/ui";
+import { AnimatePresence, motion } from "motion/react";
+import { GateMark } from "@/components/brand";
+import { CopyField } from "@/components/copy-field";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/dialog";
+import { Field } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "Never";
 
-function status(t: TokenRow): { label: string; tone: "neutral" | "danger" | "accent" } {
-  if (t.revoked_at) return { label: "Revoked", tone: "danger" };
-  if (t.expires_at && new Date(t.expires_at) < new Date()) return { label: "Expired", tone: "danger" };
-  return { label: "Active", tone: "accent" };
+function status(t: TokenRow): { label: string; tone: "neutral" | "destructive" | "success" } {
+  if (t.revoked_at) return { label: "Revoked", tone: "destructive" };
+  if (t.expires_at && new Date(t.expires_at) < new Date()) return { label: "Expired", tone: "destructive" };
+  return { label: "Active", tone: "success" };
 }
 
 function Tokens() {
@@ -39,50 +46,55 @@ function Tokens() {
   return (
     <div className="max-w-[640px]">
       <div className="flex items-center justify-between">
-        <h1 className="text-[22px] font-semibold leading-7 text-ink">Tokens</h1>
-        <Button variant="primary" onClick={() => setCreating(true)}>New token</Button>
+        <h1 className="text-[22px] font-semibold leading-7 text-foreground">Tokens</h1>
+        <Button onClick={() => setCreating(true)}>New token</Button>
       </div>
-      <p className="mt-2 text-[13px] text-ink-2">Agents use tokens to act for you. Revoke a token to cut off an agent.</p>
+      <p className="mt-2 text-[13px] text-muted-foreground">Agents use tokens to act for you. Revoke a token to cut off an agent.</p>
 
       <div className="mt-6">
         {error ? (
-          <p role="alert" className="text-[13px] text-danger">{(error as Error).message}</p>
+          <p role="alert" className="text-[13px] text-destructive">{(error as Error).message}</p>
         ) : !data ? (
           <div className="space-y-2">
             <Skeleton className="h-14 w-full" />
             <Skeleton className="h-14 w-full" />
           </div>
         ) : data.length === 0 ? (
-          <EmptyState
-            title="No tokens yet"
-            body="Create a token to let an agent publish pages and answer requests."
-            action={<Button variant="primary" onClick={() => setCreating(true)}>New token</Button>}
-          />
+          <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-card px-8 py-12">
+            <GateMark className="size-12 text-foreground" />
+            <h2 className="text-[17px] font-semibold text-foreground">No tokens yet</h2>
+            <p className="max-w-[40ch] text-[15px] leading-[22px] text-muted-foreground">
+              Create a token to let an agent publish pages and answer requests.
+            </p>
+            <Button onClick={() => setCreating(true)}>New token</Button>
+          </div>
         ) : (
-          <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
-            {data.map((t) => {
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-card">
+            <AnimatePresence initial={false}>
+            {data.map((t, idx) => {
               const s = status(t);
               const inactive = s.label !== "Active";
               return (
-                <li key={t.id} className="flex items-center gap-3 px-4 py-3">
+                <motion.li key={t.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05, duration: 0.35, ease: [0.2, 0, 0, 1] }} className="flex items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className={`truncate text-[13px] font-medium ${inactive ? "text-ink-3" : "text-ink"}`}>{t.name}</p>
-                      <Badge tone={s.tone}>{s.label}</Badge>
+                      <p className={`truncate text-[13px] font-medium ${inactive ? "text-subtle" : "text-foreground"}`}>{t.name}</p>
+                      <Badge variant={s.tone}>{s.label}</Badge>
                     </div>
-                    <p className="mt-0.5 truncate text-[12px] text-ink-2">
+                    <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
                       <span className="font-mono">{t.prefix}</span> · {t.scopes.join(", ")}
                     </p>
-                    <p className="tnum mt-0.5 text-[12px] text-ink-3">
+                    <p className="tnum mt-0.5 text-[12px] text-subtle">
                       Created {fmt(t.created_at)} · Last used {fmt(t.last_used_at)}
                     </p>
                   </div>
                   {!inactive && (
-                    <Button size="sm" variant="plain" onClick={() => setRevoking(t)}>Revoke</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setRevoking(t)}>Revoke</Button>
                   )}
-                </li>
+                </motion.li>
               );
             })}
+            </AnimatePresence>
           </ul>
         )}
       </div>
@@ -105,9 +117,9 @@ function Tokens() {
       >
         {created && (
           <div className="space-y-4">
-            <CopyField label="token" value={created.token} />
+            <CopyField label="token" value={created.token} wrap />
             <div className="flex justify-end">
-              <Button variant="primary" onClick={() => setCreated(null)}>I have copied it</Button>
+              <Button onClick={() => setCreated(null)}>I have copied it</Button>
             </div>
           </div>
         )}
@@ -120,8 +132,8 @@ function Tokens() {
         description="Agents using this token will stop working. This cannot be undone."
       >
         <div className="flex justify-end gap-2">
-          <Button onClick={() => setRevoking(null)}>Cancel</Button>
-          <Button variant="danger" onClick={revoke}>Revoke token</Button>
+          <Button variant="secondary" onClick={() => setRevoking(null)}>Cancel</Button>
+          <Button variant="destructive" onClick={revoke}>Revoke token</Button>
         </div>
       </Sheet>
     </div>
@@ -167,29 +179,29 @@ function CreateSheet({
       <form onSubmit={submit} className="space-y-4" noValidate>
         <Field id="token-name" label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="My Claude Code" />
         <fieldset className="space-y-2">
-          <legend className="mb-1.5 text-[12px] font-medium text-ink-2">Scopes</legend>
+          <legend className="mb-1.5 text-[12px] font-medium text-muted-foreground">Scopes</legend>
           {SCOPES.map((s) => (
             <label key={s.id} className="flex cursor-default items-start gap-2.5">
               <Checkbox.Root
                 checked={scopes.includes(s.id)}
                 onCheckedChange={(v) => toggle(s.id, v === true)}
-                className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-ink-3 data-[state=checked]:border-accent data-[state=checked]:bg-accent"
+                className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-subtle data-[state=checked]:border-primary data-[state=checked]:bg-primary"
               >
                 <Checkbox.Indicator>
-                  <Check size={12} className="text-on-accent" />
+                  <Check size={12} className="text-primary-foreground" />
                 </Checkbox.Indicator>
               </Checkbox.Root>
               <span>
-                <span className="block text-[13px] text-ink">{s.label}</span>
-                <span className="block text-[12px] text-ink-2">{s.hint}</span>
+                <span className="block text-[13px] text-foreground">{s.label}</span>
+                <span className="block text-[12px] text-muted-foreground">{s.hint}</span>
               </span>
             </label>
           ))}
         </fieldset>
-        {error && <p role="alert" className="text-[13px] text-danger">{error}</p>}
+        {error && <p role="alert" className="text-[13px] text-destructive">{error}</p>}
         <div className="flex justify-end gap-2">
-          <Button type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={busy}>{busy ? "Creating token" : "Create token"}</Button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={busy}>{busy ? "Creating token" : "Create token"}</Button>
         </div>
       </form>
     </Sheet>

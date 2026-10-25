@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { api, fetchMe, setCsrf } from "@/lib/api";
-import { Button, Skeleton } from "@/components/ui";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Page() {
   const router = useRouter();
@@ -25,13 +26,13 @@ export default function Page() {
 
   return (
     <div className="max-w-[640px]">
-      <h1 className="text-[22px] font-semibold leading-7 text-ink">Account</h1>
-      <dl className="mt-6 divide-y divide-line rounded-lg border border-line bg-surface">
+      <h1 className="text-[22px] font-semibold leading-7 tracking-[-0.01em] text-foreground">Account</h1>
+      <dl className="mt-6 divide-y divide-border rounded-xl border border-border bg-card shadow-card">
         {me ? (
           rows.map(([k, v]) => (
             <div key={k} className="flex items-center justify-between px-4 py-3">
-              <dt className="text-[13px] text-ink-2">{k}</dt>
-              <dd className="text-[13px] text-ink">{v}</dd>
+              <dt className="text-[13px] text-muted-foreground">{k}</dt>
+              <dd className="text-[13px] text-foreground">{v}</dd>
             </div>
           ))
         ) : (
@@ -43,7 +44,7 @@ export default function Page() {
         )}
       </dl>
       <div className="mt-6">
-        <Button onClick={signOut}>Sign out</Button>
+        <Button variant="secondary" onClick={signOut}>Sign out</Button>
       </div>
     </div>
   );

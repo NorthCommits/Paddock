@@ -1,100 +1,104 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-/* Design tokens: see docs/DESIGN.md section 4 */
+/* Design tokens: see docs/DESIGN.md section 4. Names follow shadcn semantics. */
 :root {
-  --bg: #ffffff;
-  --bg-grouped: #f5f5f7;
-  --surface: #ffffff;
-  --sidebar: rgba(245, 245, 247, 0.8);
-  --text: #1d1d1f;
-  --text-2: #6e6e73;
-  --text-3: #86868b;
-  --separator: rgba(0, 0, 0, 0.1);
-  --accent: #2b7a4b;
-  --accent-hover: #256a41;
-  --accent-text: #2b7a4b;
-  --on-accent: #ffffff;
-  --success: #248a3d;
-  --warning: #b25000;
-  --danger: #d70015;
-  --shadow: 0 8px 30px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+  --background: #fbfaf6;
+  --foreground: #1d1d1b;
+  --card: #ffffff;
+  --muted: #f1efe8;
+  --muted-foreground: #66655e;
+  --subtle: #6c6b63;
+  --border: rgba(40, 36, 20, 0.12);
+  --primary: #2b7a4b;
+  --primary-hover: #256a41;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e4f0e8;
+  --destructive: #d70015;
+  --ring: #2b7a4b;
+  --shadow-float: 0 12px 40px rgba(30, 40, 20, 0.14), 0 0 0 0.5px rgba(30, 30, 20, 0.1);
+  --shadow-card: 0 1px 2px rgba(30, 30, 20, 0.06), 0 8px 24px rgba(30, 40, 20, 0.06);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1c1c1e;
-    --bg-grouped: #000000;
-    --surface: #2c2c2e;
-    --sidebar: rgba(44, 44, 46, 0.8);
-    --text: #f5f5f7;
-    --text-2: #a1a1a6;
-    --text-3: #6e6e73;
-    --separator: rgba(255, 255, 255, 0.14);
-    --accent: #5fbf85;
-    --accent-hover: #74cc96;
-    --accent-text: #5fbf85;
-    --on-accent: #0b2415;
-    --success: #30d158;
-    --warning: #ff9f0a;
-    --danger: #ff453a;
-    --shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+    --background: #161715;
+    --foreground: #f3f2ec;
+    --card: #222421;
+    --muted: #0f100e;
+    --muted-foreground: #a6a59c;
+    --subtle: #939289;
+    --border: rgba(255, 255, 240, 0.13);
+    --primary: #5fbf85;
+    --primary-hover: #74cc96;
+    --primary-foreground: #0b2415;
+    --primary-soft: #1e3326;
+    --destructive: #ff453a;
+    --ring: #5fbf85;
+    --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 240, 0.1);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
     color-scheme: dark;
   }
 }
 
 @theme inline {
-  --color-bg: var(--bg);
-  --color-grouped: var(--bg-grouped);
-  --color-surface: var(--surface);
-  --color-sidebar: var(--sidebar);
-  --color-ink: var(--text);
-  --color-ink-2: var(--text-2);
-  --color-ink-3: var(--text-3);
-  --color-line: var(--separator);
-  --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
-  --color-accent-ink: var(--accent-text);
-  --color-on-accent: var(--on-accent);
-  --color-danger: var(--danger);
-  --color-success: var(--success);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle: var(--subtle);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
+  --radius-xl: 20px;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui,
     "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --shadow-float: var(--shadow);
+  --shadow-float: var(--shadow-float);
+  --shadow-card: var(--shadow-card);
 }
 
 html {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--background);
+  color: var(--foreground);
   font-size: 13px;
   line-height: 18px;
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
+button, a, [role="button"], label[for], summary { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
 .tnum { font-variant-numeric: tabular-nums; }
 
-@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes sheet-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
-@keyframes pulse-soft { 50% { opacity: 0.5; } }
+/* Quiet paper grain: a faint dot grid used behind heroes */
+.dots {
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
 
-.anim-fade { animation: fade-in 200ms cubic-bezier(0.2, 0, 0, 1); }
-.anim-sheet { animation: sheet-in 320ms cubic-bezier(0.32, 0.72, 0, 1); }
-.skeleton { background: var(--separator); border-radius: 6px; animation: pulse-soft 1.4s ease-in-out infinite; }
+@keyframes shimmer { 0% { opacity: 0.55; } 50% { opacity: 1; } 100% { opacity: 0.55; } }
+.skeleton { background: var(--border); border-radius: 6px; animation: shimmer 1.6s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
-  .anim-sheet { animation-name: fade-in; }
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }

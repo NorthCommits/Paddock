@@ -56,3 +56,6 @@ design-skills/
 .claude/skills/apple-design/
 # Logo design skill (its library contains third-party trademarked logos, kept local)
 .claude/skills/logo-design/
+.claude/skills/motion-framer/
+.claude/skills/shadcn/
+.claude/skills/ui-ux-pro-max/
