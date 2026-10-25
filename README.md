@@ -14,19 +14,20 @@ Paddock never calls a language model. It stores no model keys and runs no infere
 
 | Part | State |
 |---|---|
-| Design documents | Done: [PRD](backend/docs/PRD.md), [Architecture](backend/docs/ARCHITECTURE.md), [SDD](backend/docs/SDD.md) |
+| Design documents | Done: [PRD](backend/docs/PRD.md), [Architecture](backend/docs/ARCHITECTURE.md), [SDD](backend/docs/SDD.md), [frontend design contract](frontend/docs/DESIGN.md) |
 | Backend, milestone 1: foundation | Done |
 | Backend, milestone 2: accounts, API tokens, permissions | Done |
 | Backend, milestone 3: pages and versions | Next |
 | Backend, milestones 4 to 9: sharing, comments and requests, real time, webhooks, CLI, hardening | Planned |
-| Frontend (Next.js) | Starts after the backend v1 ships |
+| Frontend, first release | Done: landing page, sign up (with password strength meter), log in, app shell with command palette, Pages (empty state), Connect an agent, Tokens, Account |
+| Frontend, pages, comments, sharing screens | Follow the matching backend milestones |
 
 ## Repository layout
 
 ```
 Paddock/
   backend/     Python API (FastAPI), database migrations, tests, design docs
-  frontend/    Next.js app (not started)
+  frontend/    Next.js app, design contract and brand assets
   neon.ts      Neon project configuration
 ```
 
@@ -35,11 +36,11 @@ Paddock/
 - Backend: Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic
 - Database: Neon serverless Postgres (free plan)
 - Real time: server-sent events, plus optional signed webhooks (no polling)
-- Frontend: Next.js (planned)
+- Frontend: Next.js (App Router), TypeScript, Tailwind CSS v4, Radix UI primitives, Motion for animation, Locomotive Scroll for the landing page
 
 ## Getting started
 
-You need [uv](https://docs.astral.sh/uv/) for Python and a Neon project.
+You need [uv](https://docs.astral.sh/uv/) for Python, Node 20 or newer, and a Neon project.
 
 1. Copy `backend/.env.example` to `backend/.env` and fill in the two Neon addresses.
 2. Run the backend:
@@ -51,9 +52,19 @@ You need [uv](https://docs.astral.sh/uv/) for Python and a Neon project.
    uv run uvicorn app.main:app --reload
    ```
 
-3. Open http://localhost:8000/docs for the API reference and http://localhost:8000/readyz to confirm the database connection.
+3. Run the frontend in a second terminal:
 
-Full instructions, the list of endpoints and troubleshooting are in [backend/README.md](backend/README.md).
+   ```
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+4. Open http://localhost:3000. The API reference is at http://localhost:8000/docs and http://localhost:8000/readyz confirms the database connection.
+
+The frontend calls the backend through a same-origin proxy (`/api`), so no CORS or cookie setup is needed locally.
+
+Full instructions are in [backend/README.md](backend/README.md) and [frontend/README.md](frontend/README.md).
 
 ## Tests
 
@@ -61,6 +72,8 @@ Full instructions, the list of endpoints and troubleshooting are in [backend/REA
 cd backend
 uv run pytest
 ```
+
+Frontend checks: `cd frontend && npm run lint && npm run build`.
 
 Tests start a throwaway local Postgres and never touch your Neon database.
 

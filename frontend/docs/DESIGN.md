@@ -1,6 +1,6 @@
 # Paddock: Frontend design contract (v1)
 
-Status: Accepted (accent, landing page, wordmark and API proxy decided)
+Status: Accepted. First release built (see section 7).
 Stack: Next.js (App Router), TypeScript, Tailwind CSS v4, Radix UI primitives, Lucide icons
 Backend: see ../../backend/docs/SDD.md
 
@@ -108,21 +108,22 @@ Tools: the `motion` package for entrances, scroll reveals, shared-layout indicat
 
 ## 6. Components (built once, reused)
 
-Button (primary, secondary, plain, destructive; sizes 28/32/40), TextField, Checkbox, Segmented control, Badge, Tooltip, Menu and context menu, Sheet (modal), Popover, Command palette, Toast (only for passive confirmations, never for important results), Skeleton, EmptyState, Sidebar, Toolbar, CopyField (for tokens and snippets).
+Button (default, secondary, ghost, link, destructive; sizes 28/32/40), TextField, PasswordField (show or hide toggle, strength meter on sign up), Checkbox, Segmented control, Badge, Tooltip, Menu and context menu, Sheet (modal), Popover, Command palette, Toast (only for passive confirmations, never for important results), Skeleton, EmptyState, Sidebar, Toolbar, CopyField (for tokens and snippets).
 
 All interactive pieces come from Radix primitives for correct keyboard and screen reader behaviour, styled with our tokens.
 
-## 7. Screens for the first release (what the backend supports today)
+## 7. Screens for the first release (built)
 
-| Screen | Job | Primary action | States to design |
-|---|---|---|---|
-| Landing | Explain Paddock in one screen and one scroll | Create account | Light, dark, small screens |
-| Sign up | Create an account | Create account | Field errors, duplicate email or handle, submitting |
-| Log in | Return to the workspace | Log in | Wrong credentials, submitting |
-| Pages (home) | Show published pages | Connect an agent | Empty (the real state today), loading |
-| Connect an agent | Get an agent publishing | Create token | Steps, copy snippets, token reveal |
-| Settings: tokens | Manage agent tokens | New token | Empty, list, creating, show-once secret, revoke confirmation, expired and revoked |
-| Settings: account | See account details, sign out | Sign out | Loaded |
+| Screen | Job | Notes |
+|---|---|---|
+| Landing | Explain Paddock and let people try the loop | Interactive hero (mention the agent, get a new version, switch versions), why Paddock, pinned three-step section, what agents can publish, click-to-comment demo, live and versioned feature cards, bring your own agent, safety, FAQ, closing call to action. Demos are labelled as simulations. Items not built yet are described as "on the way". |
+| Sign up | Create an account | Password strength meter and show or hide toggle. Field errors from the API are shown in place. |
+| Log in | Return to the workspace | Show or hide toggle. |
+| Pages (home) | Show published pages | Empty state with an example preview. Pages arrive with the backend pages milestone. |
+| Connect an agent | Get an agent publishing | Three steps with copyable snippets in curl, Python and Node. |
+| Tokens | Manage agent tokens | List with status, create sheet with scopes, show-once secret, revoke confirmation. |
+| Account | See account details, sign out | |
+| Command palette | Go anywhere, create a token, sign out | Cmd K or Ctrl K. |
 
 Screens for pages, versions, comments, requests and sharing follow as their backend milestones are finished.
 
@@ -146,7 +147,7 @@ Indigo, purple or pink gradients; glow orbs and blurred blobs; the Inter font; l
 
 1. Build and type check pass; lint passes.
 2. Unit tests for the API client and logic; end-to-end tests for sign up, log in and token creation against a test backend.
-3. Screenshots of every screen in light and dark at 375, 768, 1024 and 1440 widths, reviewed against this page.
+3. Screenshots of every screen in light and dark at 375, 768, 1024 and 1440 widths (done by hand for the first release), reviewed against this page.
 4. Contrast values checked by script.
 5. Keyboard-only walk through each flow.
 6. Final review with the accessibility and design critique skills.
