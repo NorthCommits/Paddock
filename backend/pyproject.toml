@@ -40,6 +40,7 @@ target-version = "py312"
 
 [tool.ruff.lint.per-file-ignores]
 "app/services/emails.py" = ["E501"]
+"tests/test_sharing.py" = ["E501", "E741"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

@@ -48,3 +48,23 @@ def reset_password(to: str, name: str, link: str, minutes: int) -> Message:
         text=text,
         html=_page("Reset your password", intro, "Choose a new password", link, outro),
     )
+
+
+def page_invite(to: str, inviter: str, title: str, role: str, link: str, days: int) -> Message:
+    what = {
+        "viewer": "view",
+        "commenter": "view and comment on",
+        "editor": "view, comment on and edit",
+    }
+    intro = f"{inviter} invited you to {what.get(role, 'view')} the page {title} on Paddock."
+    outro = (
+        f"This invitation works for {days} days. Sign in with {to} to accept it. "
+        "If you were not expecting it, you can ignore this email."
+    )
+    text = f"{intro}\n\nOpen the invitation: {link}\n\n{outro}\n"
+    return Message(
+        to=to,
+        subject=f"{inviter} shared a page with you on Paddock",
+        text=text,
+        html=_page("You have been invited", intro, "View invitation", link, outro),
+    )

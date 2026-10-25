@@ -161,6 +161,64 @@ class Page(Base):
     )
 
 
+class PageMember(Base):
+    """A person who was given access to someone else's page."""
+
+    __tablename__ = "page_members"
+
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(20))  # viewer, commenter or editor
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (
+        PrimaryKeyConstraint("page_id", "user_id"),
+        Index("ix_page_members_user_id", "user_id"),
+    )
+
+
+class PageInvite(Base):
+    """An invitation sent to an email address. Only a hash of the token is stored."""
+
+    __tablename__ = "page_invites"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    email: Mapped[str] = mapped_column(String(320))  # lowercase
+    role: Mapped[str] = mapped_column(String(20))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _now_column()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index("ix_page_invites_page_id", "page_id"),)
+
+
+class ShareLink(Base):
+    """A secret link that lets anyone who holds it open the page. Never grants editing."""
+
+    __tablename__ = "share_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    role: Mapped[str] = mapped_column(String(20))  # viewer or commenter
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _now_column()
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index("ix_share_links_page_id", "page_id"),)
+
+
 class PageVersion(Base):
     """An immutable snapshot of a page. Numbers go 1, 2, 3 and never change."""
 

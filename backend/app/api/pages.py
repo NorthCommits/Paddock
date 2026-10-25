@@ -52,7 +52,7 @@ async def create_page(request: Request, db: DbDep, actor: VerifiedActorDep):
         ip=client_ip(request),
     )
     return PublishOut(
-        page=await pages.page_out(db, page),
+        page=await pages.page_out(db, page, actor.user),
         version=await pages.version_out(db, version),
         created=True,
     )
@@ -67,13 +67,13 @@ async def list_pages(
     slug: str | None = None,
 ):
     rows, next_cursor = await pages.list_pages(db, actor, limit=limit, cursor=cursor, slug=slug)
-    return PageListOut(items=await pages.page_outs(db, rows), next_cursor=next_cursor)
+    return PageListOut(items=await pages.page_outs(db, rows, actor.user), next_cursor=next_cursor)
 
 
 @router.get("/{page_id}", response_model=PageOut)
 async def get_page(page_id: uuid.UUID, db: DbDep, actor: ActorDep):
     page = await pages.get_for_actor(db, actor, page_id, "page.view")
-    return await pages.page_out(db, page)
+    return await pages.page_out(db, page, actor.user)
 
 
 @router.patch("/{page_id}", response_model=PageOut)
@@ -81,9 +81,15 @@ async def update_page(
     page_id: uuid.UUID, body: PageUpdate, request: Request, db: DbDep, actor: VerifiedActorDep
 ):
     page = await pages.update_page(
-        db, actor, page_id, title=body.title, slug=body.slug, ip=client_ip(request)
+        db,
+        actor,
+        page_id,
+        title=body.title,
+        slug=body.slug,
+        visibility=body.visibility,
+        ip=client_ip(request),
     )
-    return await pages.page_out(db, page)
+    return await pages.page_out(db, page, actor.user)
 
 
 @router.delete("/{page_id}", status_code=204)
@@ -112,7 +118,7 @@ async def publish_version(
     )
     response.status_code = 201 if created else 200
     return PublishOut(
-        page=await pages.page_out(db, page),
+        page=await pages.page_out(db, page, actor.user),
         version=await pages.version_out(db, version),
         created=created,
     )
@@ -151,7 +157,7 @@ async def rollback_version(
     page, version, created = await pages.rollback(db, actor, page_id, number, client_ip(request))
     response.status_code = 201 if created else 200
     return PublishOut(
-        page=await pages.page_out(db, page),
+        page=await pages.page_out(db, page, actor.user),
         version=await pages.version_out(db, version),
         created=created,
     )
