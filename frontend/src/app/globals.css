@@ -15,6 +15,7 @@
   --primary-foreground: #ffffff;
   --primary-soft: #e4f0e8;
   --destructive: #d70015;
+  --warning: #b25000;
   --ring: #2b7a4b;
   --shadow-float: 0 12px 40px rgba(30, 40, 20, 0.14), 0 0 0 0.5px rgba(30, 30, 20, 0.1);
   --shadow-card: 0 1px 2px rgba(30, 30, 20, 0.06), 0 8px 24px rgba(30, 40, 20, 0.06);
@@ -35,6 +36,7 @@
     --primary-foreground: #0b2415;
     --primary-soft: #1e3326;
     --destructive: #ff453a;
+    --warning: #ff9f0a;
     --ring: #5fbf85;
     --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 240, 0.1);
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
@@ -55,6 +57,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-soft: var(--primary-soft);
   --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
   --color-ring: var(--ring);
   --radius-sm: 6px;
   --radius-md: 10px;

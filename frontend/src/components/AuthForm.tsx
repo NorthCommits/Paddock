@@ -9,6 +9,7 @@ import { ApiError, api, setCsrf } from "@/lib/api";
 import type { Me } from "@/lib/api";
 import { Fence, GateMark, Wordmark } from "./brand";
 import { Button } from "./ui/button";
+import { PasswordField } from "./password-field";
 import { Field } from "./ui/input";
 
 const ease = [0.2, 0, 0, 1] as const;
@@ -17,11 +18,17 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [handle, setHandle] = useState("");
+  const [email, setEmail] = useState("");
   const signup = mode === "signup";
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    if (signup && String(f.get("password") ?? "").length < 10) {
+      setError("Use a password of at least 10 characters.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -72,6 +79,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
                   <Field
                     id="handle"
                     name="handle"
+                    onChange={(e) => setHandle(e.target.value)}
                     label="Handle"
                     autoComplete="username"
                     required
@@ -79,15 +87,13 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
                   />
                 </>
               )}
-              <Field id="email" name="email" type="email" label="Email" autoComplete="email" required />
-              <Field
+              <Field id="email" name="email" type="email" label="Email" autoComplete="email" required onChange={(e) => setEmail(e.target.value)} />
+              <PasswordField
                 id="password"
                 name="password"
-                type="password"
-                label="Password"
+                meter={signup}
                 autoComplete={signup ? "new-password" : "current-password"}
-                required
-                hint={signup ? "At least 10 characters." : undefined}
+                extras={[handle, email.split("@")[0]]}
               />
               {error && (
                 <motion.p
