@@ -7,7 +7,20 @@ accounts first, then pages and versions, sharing, comments, events and webhooks.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text, Uuid, func
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    PrimaryKeyConstraint,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -82,3 +95,88 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = _now_column()
 
     __table_args__ = (Index("ix_audit_log_user_id_created_at", "user_id", "created_at"),)
+
+
+class Blob(Base):
+    """One stored file, identified by its SHA-256. Many versions can share a blob."""
+
+    __tablename__ = "blobs"
+
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    storage_key: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = _now_column()
+    ref_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class Page(Base):
+    __tablename__ = "pages"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    slug: Mapped[str] = mapped_column(String(60))
+    title: Mapped[str] = mapped_column(String(200))
+    visibility: Mapped[str] = mapped_column(String(10), default="private", server_default="private")
+    current_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(
+            "page_versions.id",
+            use_alter=True,
+            name="fk_pages_current_version_id_page_versions",
+            ondelete="SET NULL",
+        )
+    )
+    created_at: Mapped[datetime] = _now_column()
+    updated_at: Mapped[datetime] = _now_column(onupdate=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        # A slug is unique per owner, but a deleted page frees its slug.
+        Index(
+            "uq_pages_owner_id_slug_live",
+            "owner_id",
+            "slug",
+            unique=True,
+            postgresql_where=text("deleted_at is null"),
+        ),
+    )
+
+
+class PageVersion(Base):
+    """An immutable snapshot of a page. Numbers go 1, 2, 3 and never change."""
+
+    __tablename__ = "page_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    number: Mapped[int] = mapped_column(Integer)
+    message: Mapped[str | None] = mapped_column(String(500))
+    author_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    author_token_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    entry_path: Mapped[str] = mapped_column(String(200))
+    total_bytes: Mapped[int] = mapped_column(BigInteger)
+    file_count: Mapped[int] = mapped_column(Integer)
+    content_hash: Mapped[str] = mapped_column(String(64))  # fingerprint of the file set
+    rolled_back_from: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("page_versions.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (
+        UniqueConstraint("page_id", "number", name="uq_page_versions_page_id_number"),
+    )
+
+
+class VersionFile(Base):
+    __tablename__ = "version_files"
+
+    version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("page_versions.id", ondelete="CASCADE")
+    )
+    path: Mapped[str] = mapped_column(String(200))
+    sha256: Mapped[str] = mapped_column(ForeignKey("blobs.sha256"))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    content_type: Mapped[str] = mapped_column(String(100))
+
+    __table_args__ = (PrimaryKeyConstraint("version_id", "path", name="pk_version_files"),)

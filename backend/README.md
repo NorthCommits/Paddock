@@ -11,8 +11,11 @@ Design documents are in [`docs/`](docs): [PRD](docs/PRD.md), [Architecture](docs
 | Operations | `GET /healthz`, `GET /readyz` |
 | Accounts | `POST /v1/auth/signup`, `POST /v1/auth/login`, `POST /v1/auth/logout`, `GET /v1/me` |
 | API tokens | `POST /v1/tokens`, `GET /v1/tokens`, `DELETE /v1/tokens/{id}` |
+| Pages | `POST /v1/pages`, `GET /v1/pages`, `GET/PATCH/DELETE /v1/pages/{id}` |
+| Versions | `POST /v1/pages/{id}/versions`, `GET /v1/pages/{id}/versions`, `GET /v1/pages/{id}/versions/{n}`, `POST /v1/pages/{id}/versions/{n}/rollback` |
+| Viewing | `POST /v1/pages/{id}/view-url`, then open the URL on the content server |
 
-Pages, versions, sharing, comments, requests and real-time streams are planned in later milestones (see SDD section 13).
+Sharing, comments, requests and real-time streams are planned in later milestones (see SDD section 13).
 
 ## Requirements
 
@@ -29,7 +32,13 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-The web app lives in [`../frontend`](../frontend). Then open:
+The web app lives in [`../frontend`](../frontend). Published pages are served by a second, separate server so their scripts never share an origin with the app:
+
+```
+uv run uvicorn app.content:app --port 8001
+```
+
+Then open:
 - http://localhost:8000/docs for the interactive API reference
 - http://localhost:8000/readyz, which should show `{"status":"ready"}` when the database is reachable
 
@@ -45,6 +54,9 @@ Settings come from environment variables or `backend/.env`. Never commit `.env`.
 | `ENVIRONMENT` | `development`, `test` or `production`. Production turns on secure cookies | `development` |
 | `APP_ORIGIN` | Address of the frontend, allowed by CORS. The frontend normally reaches the API through its own `/api` proxy | `http://localhost:3000` |
 | `CONTENT_ORIGIN` | Address that will serve published pages | `http://localhost:8001` |
+| `STORAGE_BACKEND` | Where files are kept. Only `local` for now | `local` |
+| `STORAGE_LOCAL_PATH` | Folder for stored files | `storage` |
+| `CONTENT_TOKEN_MINUTES` | Lifetime of a view link | `15` |
 | `SESSION_DAYS` | Browser login lifetime | `30` |
 | `LOG_LEVEL` | Logging level | `INFO` |
 

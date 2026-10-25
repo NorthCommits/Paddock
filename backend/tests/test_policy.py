@@ -13,6 +13,7 @@ EXPECTED = {
     "request.create": {"commenter", "editor", "owner"},
     "version.publish": {"editor", "owner"},
     "request.act": {"editor", "owner"},
+    "page.update": {"owner"},
     "page.manage_sharing": {"owner"},
     "page.delete": {"owner"},
 }

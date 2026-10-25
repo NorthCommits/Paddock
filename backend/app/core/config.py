@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     max_file_bytes: int = 10 * 1024 * 1024
     max_files: int = 200
 
+    # Where uploaded files live. Only local disk is built so far (see SDD section 8).
+    storage_backend: str = "local"
+    storage_local_path: str = "storage"
+
+    # How long a signed link to published content stays valid.
+    content_token_minutes: int = 15
+
     @property
     def cookie_secure(self) -> bool:
         """Browsers only send secure cookies over HTTPS, so switch it off for local work."""

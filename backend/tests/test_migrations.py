@@ -11,7 +11,17 @@ import asyncpg
 from tests.conftest import TEST_DB_URL
 
 BACKEND = Path(__file__).resolve().parents[1]
-EXPECTED_TABLES = {"users", "sessions", "api_tokens", "audit_log", "alembic_version"}
+EXPECTED_TABLES = {
+    "users",
+    "sessions",
+    "api_tokens",
+    "audit_log",
+    "blobs",
+    "pages",
+    "page_versions",
+    "version_files",
+    "alembic_version",
+}
 
 
 def _with_database(url: str, name: str) -> str:

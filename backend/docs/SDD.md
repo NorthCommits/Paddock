@@ -269,7 +269,8 @@ The `data` object holds enough to act without another call (for example the comm
 
 ## 7. Content gateway
 
-- Route: `GET /{page_id}/{version_number}/{path}` on the content origin, with a signed `?t=` token (or a short-lived cookie set on the content origin itself after the first request).
+- Route: `GET /c/{token}/{path}` on the content origin. The signed token (page id, version, expiry, 15 minutes by default) sits in the URL path, not in `?t=` or a cookie, so relative asset links work and it also works inside cross-site iframes. Built in milestone 3 as a separate ASGI app: `uvicorn app.content:app --port 8001`.
+- Uploads: multipart (`files` parts, optional `manifest` of path and sha256) or JSON (`{"files":[{"path","content","encoding"}]}`), both checked by the same bundle rules. Storage is local disk behind an interface; S3 and two-step upload come later.
 - The token binds page, version, expiry and audience. Default lifetime: 15 minutes.
 - Files stream from object storage using the stored content type.
 - Headers on every response: `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Resource-Policy: same-site`, and a cache policy of `private, max-age=300` for versioned URLs.
