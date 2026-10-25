@@ -48,3 +48,11 @@ Thumbs.db
 *.log
 tmp/
 .tmp/
+
+# Copied design skills used as reference while building the UI
+design-skills/
+
+# Apple design review skill (contains Apple guideline text, kept local)
+.claude/skills/apple-design/
+# Logo design skill (its library contains third-party trademarked logos, kept local)
+.claude/skills/logo-design/

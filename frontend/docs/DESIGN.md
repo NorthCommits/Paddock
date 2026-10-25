@@ -1,0 +1,154 @@
+# Paddock: Frontend design contract (v1)
+
+Status: Accepted (accent, landing page, wordmark and API proxy decided)
+Stack: Next.js (App Router), TypeScript, Tailwind CSS v4, Radix UI primitives, Lucide icons
+Backend: see ../../backend/docs/SDD.md
+
+This contract fixes the visual and interaction decisions before any screen is built, so every screen follows the same rules. A reviewer should be able to check any screen against this page.
+
+## 1. What this product should feel like
+
+Paddock is a quiet tool for reading, discussing and improving pages that agents publish. It should feel like a well-made Mac app that happens to run in a browser: calm, dense enough to be useful, precise, and keyboard friendly. The content (the published page) is the hero. The interface stays out of its way.
+
+References for the feel, not for copying: Apple's own apps (Notes, Mail, Finder), Linear, Things 3, Raycast. Nothing is copied from Spacesheep or any other product: the name, words, layout and drawings are our own.
+
+## 2. Sources used
+
+- Apple Human Interface Guidelines principles, through the installed `macos-app-design` and `the-final-5-percent` skills. These are written for SwiftUI, so only the principles and measurements are used (hierarchy, spacing rhythm, motion, restraint, microcopy, accessibility). None of the Swift code is used.
+- `frontend-ui-engineering`: the list of habits that make a UI look machine-made, plus states and accessibility rules.
+- `apple-design` (dickwu/apple-design-skill, installed in `.claude/skills/apple-design`): the HIG reference with 123 pages. It is the review lens for every screen: each screen is checked against its pages on layout, typography, color, motion, accessibility and components before it is called done. Where it describes native controls, we apply the principle to the web equivalent.
+- `logo-design` (kaankiziltug/logo-design-skill, installed in `.claude/skills/logo-design`): the process for the mark (brief, concepts, audit, small-size checks, export kit). Its reference library is third-party trademarks and is never traced.
+- `ui-ux-pro-max`: its pre-delivery checklist and process only. Its generated palette (indigo with a serif and sans pairing) is rejected, because indigo and purple are exactly the look we are avoiding.
+
+## 3. Principles
+
+1. **Content first.** Chrome is neutral and thin. Colour is used for one thing: the action the person can take.
+2. **One opinion per decision.** One accent colour, three corner radii, one spacing grid, one type scale. No one-off values.
+3. **Mac conventions on the web.** Translucent sidebar, unified toolbar, hover states on everything clickable, right-click and menu actions, a command palette on Cmd+K (Ctrl+K elsewhere), and a shortcut hint wherever a shortcut exists.
+4. **Gradual revelation.** Show what matters now. Details open in place, in sheets and popovers, not on new pages.
+5. **Restraint in motion.** Motion explains where something came from or went. Frequent actions get subtle motion; rare milestones may get a moment.
+6. **Every state is designed.** Loading, empty, error, success and no-permission states get the same care as the main view.
+
+## 4. Design tokens
+
+All values live as CSS variables and Tailwind theme entries. Raw colours and pixel values are not used in components.
+
+### Colour (light / dark)
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| bg | #FFFFFF | #1C1C1E | Main surfaces |
+| bg-grouped | #F5F5F7 | #000000 | Page background behind grouped content |
+| surface-raised | #FFFFFF | #2C2C2E | Popovers, sheets, cards on grouped background |
+| sidebar | translucent #F5F5F7 | translucent #2C2C2E | Sidebar and toolbar material, with backdrop blur |
+| text | #1D1D1F | #F5F5F7 | Primary text |
+| text-secondary | #6E6E73 | #A1A1A6 | Supporting text |
+| text-tertiary | #86868B | #6E6E73 | Placeholders, disabled |
+| separator | rgba(0,0,0,0.10) | rgba(255,255,255,0.14) | Hairlines (0.5px where the screen allows) |
+| accent | #2B7A4B | #5FBF85 | Primary buttons, selection |
+| accent-text | #2B7A4B | #5FBF85 | Links and accent-coloured text |
+| on-accent | #FFFFFF | #0B2415 | Text on accent buttons |
+| success | #248A3D | #30D158 | Confirmations (always paired with text or icon) |
+| warning | #B25000 | #FF9F0A | Cautions |
+| danger | #D70015 | #FF453A | Destructive actions and errors |
+
+Accent is a warm green chosen for a distinct identity. Measured contrast: white on #2B7A4B 5.27:1; #2B7A4B on #F5F5F7 4.84:1; #5FBF85 on #1C1C1E 7.52:1 and on #000 9.28:1; #0B2415 on #5FBF85 7.26:1. Every new colour pair is checked by script before use.
+
+Rules: one accent only. No gradients. No colour as the only signal. Text contrast at least 4.5:1, large text and icons at least 3:1 (checked by script before delivery). The theme follows the system setting and can be overridden in settings.
+
+### Typography
+
+- Font stack: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif`. On Apple devices this is SF Pro, with the correct optical sizes chosen by the system. No web font is downloaded and Apple's fonts are not bundled. On other systems the platform font is used.
+- Mono: `ui-monospace, "SF Mono", Menlo, Consolas, monospace` for tokens, code and shortcuts.
+- Letter spacing is left at the font's default, except large display text (negative) and all-caps labels (positive).
+- Numbers that change use tabular figures.
+
+| Role | Size / line | Weight |
+|---|---|---|
+| Display (marketing hero) | 56 / 60 | 600, tracking -0.03em |
+| Title (page title) | 22 / 28 | 600 |
+| Headline (section, card title) | 15 / 20 | 600 |
+| Body (app) | 13 / 18 | 400 |
+| Reading (long text, marketing body) | 17 / 26 | 400 |
+| Secondary | 12 / 16 | 400, text-secondary |
+| Caption | 11 / 14 | 400 |
+
+Body text is left aligned everywhere. Only display titles and single call-to-action blocks are centred. Light weights are not used below 20px.
+
+### Spacing, size and shape
+
+- 4px grid: 4, 8, 12, 16, 20, 24, 32, 48, 64.
+- Corner radii, three only: 6 (small controls, keyboard keys), 10 (buttons, inputs, cards), 14 (popovers, sheets, windows). Pills only for tags.
+- Control heights: 28 (toolbar), 32 (default), 40 (forms and marketing). On touch screens controls are at least 44.
+- Layout widths: sidebar 240, forms 360 to 440, settings content 640, lists 960.
+- Borders are hairlines. Shadows only on floating layers (popovers, sheets, command palette), soft and low opacity, never pure black at full strength.
+
+### Motion
+
+- Durations: 120ms (hover, press), 200ms (small reveals), 320ms (sheets and larger moves).
+- Curves: enter `cubic-bezier(0.2, 0, 0, 1)`; sheets `cubic-bezier(0.32, 0.72, 0, 1)`; exits are faster than enters.
+- Only transform and opacity are animated. Animations can be interrupted. Nothing bounces except a rare celebration.
+- With reduced motion on, movement is replaced by a simple fade.
+- No spinner for anything under 500ms. Loading content uses skeletons that match the final layout, so nothing jumps.
+
+## 5. Layout and navigation
+
+**App shell.** A left sidebar (collapsible), a thin toolbar on top of the content with the page title and actions, then the content. The sidebar and toolbar use the translucent material over the content. On narrow screens the sidebar becomes a slide-over sheet.
+
+**Sidebar sections.** Pages, Requests (later), Connect an agent, Settings. The signed-in person sits at the bottom.
+
+**Command palette (Cmd+K).** Go to any screen, create a token, switch theme, sign out. Later: search pages, jump to a version.
+
+**Keyboard.** Every list supports arrow keys and type-to-select. Visible focus ring on every control (accent, 2px, offset 2px). Shortcut hints appear in menus and tooltips.
+
+## 6. Components (built once, reused)
+
+Button (primary, secondary, plain, destructive; sizes 28/32/40), TextField, Checkbox, Segmented control, Badge, Tooltip, Menu and context menu, Sheet (modal), Popover, Command palette, Toast (only for passive confirmations, never for important results), Skeleton, EmptyState, Sidebar, Toolbar, CopyField (for tokens and snippets).
+
+All interactive pieces come from Radix primitives for correct keyboard and screen reader behaviour, styled with our tokens.
+
+## 7. Screens for the first release (what the backend supports today)
+
+| Screen | Job | Primary action | States to design |
+|---|---|---|---|
+| Landing | Explain Paddock in one screen and one scroll | Create account | Light, dark, small screens |
+| Sign up | Create an account | Create account | Field errors, duplicate email or handle, submitting |
+| Log in | Return to the workspace | Log in | Wrong credentials, submitting |
+| Pages (home) | Show published pages | Connect an agent | Empty (the real state today), loading |
+| Connect an agent | Get an agent publishing | Create token | Steps, copy snippets, token reveal |
+| Settings: tokens | Manage agent tokens | New token | Empty, list, creating, show-once secret, revoke confirmation, expired and revoked |
+| Settings: account | See account details, sign out | Sign out | Loaded |
+
+Screens for pages, versions, comments, requests and sharing follow as their backend milestones are finished.
+
+## 8. Voice and microcopy
+
+- Sentence case everywhere. Buttons name the action: "Create account", "Create token", not "Submit".
+- Short, specific and warm. Say what happened and what to do next. No exclamation marks, no emoji, no jokes in errors.
+- Errors: what went wrong, then how to fix it. Example: "That email is already registered. Try logging in."
+- Destructive confirmations name the object: "Revoke 'my claude code'? Agents using it will stop working."
+- Empty states explain the next step, never just "Nothing here".
+
+## 9. Accessibility
+
+WCAG 2.1 AA: contrast, keyboard access for everything, visible focus, labelled controls, error text next to the field and announced to screen readers, reduced motion, 44px touch targets on touch screens, no information by colour alone, correct heading order, and readable at 200 percent zoom.
+
+## 10. Things this UI must not do
+
+Indigo, purple or pink gradients; glow orbs and blurred blobs; the Inter font; large rounded corners on everything; stacked shadows; emoji as icons; uniform card grids and template hero sections; centred paragraphs; placeholder-only labels; "Submit" buttons; toasts for important results; guided tours; spinners for fast loads; lorem ipsum.
+
+## 11. How the work is checked
+
+1. Build and type check pass; lint passes.
+2. Unit tests for the API client and logic; end-to-end tests for sign up, log in and token creation against a test backend.
+3. Screenshots of every screen in light and dark at 375, 768, 1024 and 1440 widths, reviewed against this page.
+4. Contrast values checked by script.
+5. Keyboard-only walk through each flow.
+6. Final review with the accessibility and design critique skills.
+
+## 12. Decisions made
+
+1. **Accent colour.** Warm green, values in section 4.
+2. **Landing page.** Built in the first release.
+3. **Mark and wordmark.** An original geometric "P" whose bowl has an open gate (a space people and agents can enter), designed with the logo-design process (concepts in `brand/concepts`, chosen: Gate P). Wordmark is the symbol plus the word "Paddock" set live in the system font at semibold. The app icon is the white mark on an accent rounded square. Assets: `brand/` (sources) and `public/brand/` (exports). It can be swapped by replacing those files.
+4. **API access.** Same-origin proxy: Next rewrites `/api/:path*` to the backend, which keeps the login cookie simple in development and production.
