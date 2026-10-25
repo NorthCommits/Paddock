@@ -35,6 +35,7 @@ from app.content import app as content_app  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_engine, get_session  # noqa: E402
 from app.main import app  # noqa: E402
+from app.services import mailer  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -94,3 +95,11 @@ async def fake_client(fake_session):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def outbox():
+    """Every test gets an empty in-memory mailbox instead of real email."""
+    box = mailer.MemoryMailer()
+    mailer.set_mailer(box)
+    return box

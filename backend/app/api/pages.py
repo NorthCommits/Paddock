@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ValidationError
 
 from app.api.bundle_input import read_bundle_request
-from app.api.deps import ActorDep, DbDep, client_ip, require_scope
+from app.api.deps import ActorDep, DbDep, VerifiedActorDep, client_ip, require_scope
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.schemas.pages import (
@@ -36,7 +36,7 @@ def _validated[T: BaseModel](model: type[T], fields: dict) -> T:
 
 
 @router.post("", status_code=201, response_model=PublishOut)
-async def create_page(request: Request, db: DbDep, actor: ActorDep):
+async def create_page(request: Request, db: DbDep, actor: VerifiedActorDep):
     """Create a page and its first version. Send multipart/form-data or JSON (see bundle_input)."""
     upload = await read_bundle_request(request)
     fields = _validated(PageFields, upload.fields)
@@ -78,7 +78,7 @@ async def get_page(page_id: uuid.UUID, db: DbDep, actor: ActorDep):
 
 @router.patch("/{page_id}", response_model=PageOut)
 async def update_page(
-    page_id: uuid.UUID, body: PageUpdate, request: Request, db: DbDep, actor: ActorDep
+    page_id: uuid.UUID, body: PageUpdate, request: Request, db: DbDep, actor: VerifiedActorDep
 ):
     page = await pages.update_page(
         db, actor, page_id, title=body.title, slug=body.slug, ip=client_ip(request)
@@ -94,7 +94,7 @@ async def delete_page(page_id: uuid.UUID, request: Request, db: DbDep, actor: Ac
 
 @router.post("/{page_id}/versions", response_model=PublishOut)
 async def publish_version(
-    page_id: uuid.UUID, request: Request, response: Response, db: DbDep, actor: ActorDep
+    page_id: uuid.UUID, request: Request, response: Response, db: DbDep, actor: VerifiedActorDep
 ):
     """Publish a new version. Identical files return the current version with created=false."""
     upload = await read_bundle_request(request)
@@ -146,7 +146,7 @@ async def rollback_version(
     request: Request,
     response: Response,
     db: DbDep,
-    actor: ActorDep,
+    actor: VerifiedActorDep,
 ):
     page, version, created = await pages.rollback(db, actor, page_id, number, client_ip(request))
     response.status_code = 201 if created else 200

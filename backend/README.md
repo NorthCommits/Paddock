@@ -13,6 +13,8 @@ Design documents are in [`docs/`](docs): [PRD](docs/PRD.md), [Architecture](docs
 | API tokens | `POST /v1/tokens`, `GET /v1/tokens`, `DELETE /v1/tokens/{id}` |
 | Pages | `POST /v1/pages`, `GET /v1/pages`, `GET/PATCH/DELETE /v1/pages/{id}` |
 | Versions | `POST /v1/pages/{id}/versions`, `GET /v1/pages/{id}/versions`, `GET /v1/pages/{id}/versions/{n}`, `POST /v1/pages/{id}/versions/{n}/rollback` |
+| Email | `POST /v1/auth/verify-email`, `POST /v1/auth/forgot-password`, `POST /v1/auth/reset-password`, `POST /v1/me/verification/resend` |
+| Profile | `PATCH /v1/me`, `POST /v1/me/password`, `GET /v1/me/sessions`, `DELETE /v1/me/sessions/{id}`, `POST /v1/me/sessions/revoke-others` |
 | Viewing | `POST /v1/pages/{id}/view-url`, then open the URL on the content server |
 
 Sharing, comments, requests and real-time streams are planned in later milestones (see SDD section 13).
@@ -57,10 +59,36 @@ Settings come from environment variables or `backend/.env`. Never commit `.env`.
 | `STORAGE_BACKEND` | Where files are kept. Only `local` for now | `local` |
 | `STORAGE_LOCAL_PATH` | Folder for stored files | `storage` |
 | `CONTENT_TOKEN_MINUTES` | Lifetime of a view link | `15` |
+| `EMAIL_BACKEND` | `console` logs emails (development). `smtp` sends them. Must be `smtp` in production | `console` |
+| `EMAIL_FROM` | Sender shown on emails, such as `Paddock <noreply@yourdomain.com>` | `Paddock <noreply@localhost>` |
+| `SMTP_HOST`, `SMTP_PORT` | Your mail server | none, `587` |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | Mail server login | none |
+| `SMTP_SECURITY` | `starttls` (port 587), `ssl` (port 465) or `none` | `starttls` |
+| `VERIFY_EMAIL_HOURS` | How long a confirmation link works | `24` |
+| `RESET_PASSWORD_MINUTES` | How long a reset link works | `60` |
 | `SESSION_DAYS` | Browser login lifetime | `30` |
 | `LOG_LEVEL` | Logging level | `INFO` |
 
 Generate a strong secret with `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`.
+
+## Email: verification and password reset
+
+Paddock sends its own email through any SMTP server. It does not use Neon or any other service for this.
+
+- **Development:** leave `EMAIL_BACKEND=console`. Emails are printed in the backend log, including the link, so you can click it without a mail account.
+- **Real sending:** create a sending account with a provider (Resend, Brevo, Zoho Mail, Amazon SES or your own server), verify your domain with them, then set:
+
+  ```
+  EMAIL_BACKEND=smtp
+  EMAIL_FROM=Paddock <noreply@yourdomain.com>
+  SMTP_HOST=smtp.yourprovider.com
+  SMTP_PORT=587
+  SMTP_USERNAME=...
+  SMTP_PASSWORD=...
+  ```
+
+  Also add the SPF and DKIM records your provider gives you, or messages will land in spam.
+- **Rules:** a new account gets a confirmation email. Until it is confirmed the person can sign in and read, but cannot publish pages or create tokens (`403 email_not_verified`). Links work once, confirmation links last 24 hours and reset links 1 hour. A reset signs the person out everywhere. "Forgot password" answers the same whether or not the email has an account. A person can ask for another email once a minute.
 
 ## How agents connect
 

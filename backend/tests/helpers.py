@@ -1,12 +1,31 @@
 PASSWORD = "correct horse battery"
 
 
-async def signup(client, email="ana@example.com", handle="ana", password=PASSWORD):
+def link_token(message) -> str:
+    """The token inside the link of an email."""
+    import re
+
+    return re.search(r"token=([A-Za-z0-9_-]+)", message.text).group(1)
+
+
+def mails_to(email: str) -> list:
+    from app.services import mailer
+
+    return [m for m in mailer.get_mailer().messages if m.to == email]
+
+
+async def signup(client, email="ana@example.com", handle="ana", password=PASSWORD, verify=True):
+    """Create an account. By default also confirm the email, as most tests need that."""
     response = await client.post(
         "/v1/auth/signup",
         json={"email": email, "password": password, "handle": handle},
     )
     assert response.status_code == 201, response.text
+    if verify:
+        done = await client.post(
+            "/v1/auth/verify-email", json={"token": link_token(mails_to(email)[-1])}
+        )
+        assert done.status_code == 204, done.text
     return response.json()
 
 

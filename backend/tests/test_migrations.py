@@ -16,6 +16,7 @@ EXPECTED_TABLES = {
     "sessions",
     "api_tokens",
     "audit_log",
+    "email_tokens",
     "blobs",
     "pages",
     "page_versions",

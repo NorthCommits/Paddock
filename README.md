@@ -18,6 +18,8 @@ Paddock never calls a language model. It stores no model keys and runs no infere
 | Backend, milestone 1: foundation | Done |
 | Backend, milestone 2: accounts, API tokens, permissions | Done |
 | Backend, milestone 3: pages, versions, bundles, content gateway | Done |
+| Frontend for milestone 3: pages, viewer, history, profile and settings | Done |
+| Email verification and password reset (own SMTP sender) | Done |
 | Backend, milestones 4 to 9: sharing, comments and requests, real time, webhooks, CLI, hardening | Planned |
 | Frontend, first release | Done: landing page, sign up (with password strength meter), log in, app shell with command palette, Pages (empty state), Connect an agent, Tokens, Account |
 | Frontend, pages, comments, sharing screens | Follow the matching backend milestones |
