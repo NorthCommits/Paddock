@@ -2,7 +2,7 @@
 
 Status: Draft for review
 Owner: Swapnil Bhattacharya
-Scope of this release: Backend (Python). The frontend (Next.js) follows after the backend ships.
+Scope of this release: Backend (Python). The frontend (Next.js) is built in step with the backend: the first release (landing, accounts, tokens) is done, and each later backend milestone gets its screens.
 
 ## 1. Summary
 

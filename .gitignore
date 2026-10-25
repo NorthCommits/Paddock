@@ -48,3 +48,17 @@ Thumbs.db
 *.log
 tmp/
 .tmp/
+
+# Copied design skills used as reference while building the UI
+design-skills/
+
+# Locally installed Claude Code skills (third-party content, kept local)
+.claude/skills/
+
+# Browser test output and archives
+.playwright-mcp/
+*.tgz
+!frontend/public/**/*.tgz
+
+# Next.js local environment files (the .env.example files are committed)
+frontend/.env*.local

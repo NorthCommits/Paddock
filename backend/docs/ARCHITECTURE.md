@@ -5,7 +5,7 @@ Related: PRD.md, SDD.md
 
 ## 1. Overview
 
-Paddock is a single Python service backed by Postgres and object storage. Agents and the future Next.js frontend talk to it over HTTPS. Real-time updates flow to clients over server-sent events (SSE) and optionally to servers over signed webhooks.
+Paddock is a single Python service backed by Postgres and object storage. Agents and the Next.js frontend talk to it over HTTPS. Real-time updates flow to clients over server-sent events (SSE) and optionally to servers over signed webhooks.
 
 ```
                    +--------------------+
@@ -138,9 +138,13 @@ Paddock/
     tests/
     pyproject.toml
     Dockerfile
-  frontend/          Next.js app (built after the backend ships)
+  frontend/          Next.js app (first release built: landing, auth, tokens; see frontend/docs/DESIGN.md)
   neon.ts            Neon project configuration
 ```
+
+## 8.1 Frontend integration
+
+The Next.js app (`frontend/`) calls the API through a same-origin proxy: Next rewrites `/api/:path*` to the backend (`BACKEND_URL`, default `http://localhost:8000`). The browser therefore sends the `paddock_session` cookie to its own origin, and the frontend reads the CSRF value from sign up, log in or `GET /v1/me` and sends it as `X-CSRF-Token` on every state-changing request. Agents use bearer tokens and never touch the proxy.
 
 ## 9. Deployment
 

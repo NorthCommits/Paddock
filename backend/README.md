@@ -29,7 +29,7 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload
 ```
 
-Then open:
+The web app lives in [`../frontend`](../frontend). Then open:
 - http://localhost:8000/docs for the interactive API reference
 - http://localhost:8000/readyz, which should show `{"status":"ready"}` when the database is reachable
 
@@ -43,7 +43,7 @@ Settings come from environment variables or `backend/.env`. Never commit `.env`.
 | `DATABASE_URL_UNPOOLED` | Neon direct address, used by migrations | falls back to `DATABASE_URL` |
 | `SECRET_KEY` | Signs CSRF values. Must be set in production | development placeholder |
 | `ENVIRONMENT` | `development`, `test` or `production`. Production turns on secure cookies | `development` |
-| `APP_ORIGIN` | Address of the frontend, allowed by CORS | `http://localhost:3000` |
+| `APP_ORIGIN` | Address of the frontend, allowed by CORS. The frontend normally reaches the API through its own `/api` proxy | `http://localhost:3000` |
 | `CONTENT_ORIGIN` | Address that will serve published pages | `http://localhost:8001` |
 | `SESSION_DAYS` | Browser login lifetime | `30` |
 | `LOG_LEVEL` | Logging level | `INFO` |
