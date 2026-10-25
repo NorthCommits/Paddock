@@ -1,21 +1,28 @@
 import { Fence, GateMark, Wordmark } from "@/components/brand";
 import { LinkButton } from "@/components/ui/button";
+import { Collab } from "@/components/landing/collab";
 import { Features } from "@/components/landing/features";
 import { HeroDemo } from "@/components/landing/hero-demo";
+import { How } from "@/components/landing/how";
 import { Reveal, RiseWords } from "@/components/landing/motion-bits";
-
-const steps = [
-  { n: "01", title: "Connect your agent", body: "Create a token and hand it to Claude Code, Codex, Cursor or any tool that can call an HTTP API." },
-  { n: "02", title: "It publishes a page", body: "Reports, dashboards, mockups and small apps get a private address. Every version is kept." },
-  { n: "03", title: "Comment, mention, repeat", body: "Leave a note and mention @agent. The request reaches your agent live, and a new version comes back." },
-];
+import { Agents, Faq, Safety } from "@/components/landing/more";
+import { Showcase } from "@/components/landing/showcase";
+import { SmoothScroll } from "@/components/landing/smooth-scroll";
+import { Why } from "@/components/landing/why";
 
 export default function Landing() {
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-dvh overflow-x-clip bg-background">
+      <SmoothScroll />
       <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-[1120px] items-center justify-between px-6">
           <Wordmark size={24} />
+          <nav aria-label="Sections" className="hidden items-center gap-6 text-[13px] text-muted-foreground md:flex">
+            <a href="#how" className="transition-colors duration-[120ms] hover:text-foreground">How it works</a>
+            <a href="#collab" className="transition-colors duration-[120ms] hover:text-foreground">Collaborate</a>
+            <a href="#safe" className="transition-colors duration-[120ms] hover:text-foreground">Safety</a>
+            <a href="#faq" className="transition-colors duration-[120ms] hover:text-foreground">Questions</a>
+          </nav>
           <nav aria-label="Account" className="flex items-center gap-1.5">
             <LinkButton href="/login" variant="ghost">Log in</LinkButton>
             <LinkButton href="/signup">Create account</LinkButton>
@@ -65,31 +72,16 @@ export default function Landing() {
           </div>
         </section>
 
-        <section aria-labelledby="how" className="bg-muted">
-          <div className="mx-auto max-w-[1120px] px-6 py-20">
-            <Reveal>
-              <h2 id="how" className="text-[28px] font-semibold leading-9 tracking-[-0.02em] text-foreground">
-                One loop, three moves
-              </h2>
-            </Reveal>
-            <ol className="mt-12 grid gap-10 md:grid-cols-3">
-              {steps.map((s, k) => (
-                <li key={s.n}>
-                  <Reveal delay={k * 0.1}>
-                    <p className="tnum text-[40px] font-semibold leading-none tracking-[-0.03em] text-primary/40">{s.n}</p>
-                    <h3 className="mt-4 text-[17px] font-semibold text-foreground">{s.title}</h3>
-                    <p className="mt-2 text-[15px] leading-[22px] text-muted-foreground">{s.body}</p>
-                  </Reveal>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
+        <Why />
+        <div id="how"><How /></div>
+        <Showcase />
+        <div id="collab"><Collab /></div>
 
-        <section className="mx-auto max-w-[1120px] px-6 py-20" aria-labelledby="built">
+        <section className="mx-auto max-w-[1120px] px-6 py-24" aria-labelledby="built">
           <Reveal>
-            <h2 id="built" className="max-w-[18ch] text-[28px] font-semibold leading-9 tracking-[-0.02em] text-foreground">
-              Built to stay out of the way
+            <p className="text-[13px] font-medium text-primary">Built to stay out of the way</p>
+            <h2 id="built" className="mt-2 max-w-[20ch] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
+              Live, versioned and private.
             </h2>
           </Reveal>
           <div className="mt-10">
@@ -97,10 +89,16 @@ export default function Landing() {
           </div>
         </section>
 
+        <Agents />
+        <div id="safe"><Safety /></div>
+        <div id="faq"><Faq /></div>
+
         <section className="mx-auto max-w-[1120px] px-6 pb-24">
           <Reveal>
             <div className="relative overflow-hidden rounded-xl bg-primary px-8 py-14 text-primary-foreground md:px-14">
-              <GateMark dot="var(--primary-foreground)" className="pointer-events-none absolute -right-6 -top-10 size-[260px] text-primary-foreground/15 md:size-[340px]" />
+              <div data-scroll data-scroll-speed="-0.6" className="pointer-events-none absolute -right-6 -top-10">
+                <GateMark dot="var(--primary-foreground)" className="size-[260px] text-primary-foreground/15 md:size-[340px]" />
+              </div>
               <h2 className="relative max-w-[16ch] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] md:text-[44px]">
                 Open the gate for your agents.
               </h2>

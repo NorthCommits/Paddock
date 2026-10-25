@@ -20,6 +20,7 @@ References for the feel, not for copying: Apple's own apps (Notes, Mail, Finder)
 - `logo-design` (kaankiziltug/logo-design-skill, installed in `.claude/skills/logo-design`): the process for the mark (brief, concepts, audit, small-size checks, export kit). Its reference library is third-party trademarks and is never traced.
 - `shadcn` (shadcn-ui/ui skill): component conventions. Components live in `src/components/ui`, use `cva` variants, `cn()`, semantic tokens and `data-slot`. The shadcn CLI registry is not reachable from our build machine, so components are written by hand in the same style.
 - `motion-framer` (freshtechbro/claudedesignskills): animation with the `motion` package (`motion/react`). Rules in section 4.
+- `locomotive-scroll` (freshtechbro/claudedesignskills): smooth scrolling. The skill documents v4, which hijacks scrolling with transforms. We use v5 (built on Lenis) instead because it keeps the native scrollbar, sticky headers and in-view reveals working. Used on the landing page only, off for reduced motion, native momentum on touch.
 - `ui-ux-pro-max`: its pre-delivery checklist and process only. Its generated palette (indigo with a serif and sans pairing) is rejected, because indigo and purple are exactly the look we are avoiding.
 
 ## 3. Principles
@@ -86,7 +87,7 @@ Body text is left aligned everywhere. Only display titles and single call-to-act
 
 ### Motion
 
-Tools: the `motion` package for entrances, scroll reveals, shared-layout indicators (`layoutId`) and exits; CSS keyframes (`tw-animate-css`) for dialogs. Patterns in use: word-by-word headline rise, looping product illustration, scroll reveal with stagger, fence posts that grow in, an agent dot passing through the gate, spring-moving nav and tab indicators, page-to-page fade, list items entering in sequence. Everything respects reduced motion (`useReducedMotion` and a global media query).
+Tools: the `motion` package for entrances, scroll reveals, shared-layout indicators (`layoutId`) and exits; CSS keyframes (`tw-animate-css`) for dialogs. Patterns in use: word-by-word headline rise, looping product illustration, scroll reveal with stagger, fence posts that grow in, an agent dot passing through the gate, spring-moving nav and tab indicators, page-to-page fade, list items entering in sequence. The landing page also has a scroll progress bar, a pinned three-step section, and interactive demos (a hero where you mention the agent and get a new version, click-to-comment lines, tabs of what agents can publish). Demos are labelled as simulations. Everything respects reduced motion (`useReducedMotion` and a global media query).
 
 
 - Durations: 120ms (hover, press), 200ms (small reveals), 320ms (sheets and larger moves).
