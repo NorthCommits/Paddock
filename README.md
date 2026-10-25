@@ -1,0 +1,69 @@
+# Paddock
+
+A shared workspace for people and their own AI agents.
+
+An agent (Claude Code, Codex, Cursor, or any tool that can run a command or call an HTTP API) publishes a page to a private URL: a report, a dashboard, a mockup or a small app. People open the page, comment on it, and mention `@agent` to ask for changes. The request reaches the agent in real time, the agent publishes an improved version, and every version is kept.
+
+Paddock is inspired by the idea behind Spacesheep. It is an original project: no code, text, branding or visual assets are copied.
+
+## Bring your own agent
+
+Paddock never calls a language model. It stores no model keys and runs no inference. All intelligence lives in the agents that users connect with their own API tokens. Paddock is the hosting, versioning, collaboration and notification layer.
+
+## Status
+
+| Part | State |
+|---|---|
+| Design documents | Done: [PRD](backend/docs/PRD.md), [Architecture](backend/docs/ARCHITECTURE.md), [SDD](backend/docs/SDD.md) |
+| Backend, milestone 1: foundation | Done |
+| Backend, milestone 2: accounts, API tokens, permissions | Done |
+| Backend, milestone 3: pages and versions | Next |
+| Backend, milestones 4 to 9: sharing, comments and requests, real time, webhooks, CLI, hardening | Planned |
+| Frontend (Next.js) | Starts after the backend v1 ships |
+
+## Repository layout
+
+```
+Paddock/
+  backend/     Python API (FastAPI), database migrations, tests, design docs
+  frontend/    Next.js app (not started)
+  neon.ts      Neon project configuration
+```
+
+## Technology
+
+- Backend: Python 3.12, FastAPI, SQLAlchemy 2 (async), Alembic
+- Database: Neon serverless Postgres (free plan)
+- Real time: server-sent events, plus optional signed webhooks (no polling)
+- Frontend: Next.js (planned)
+
+## Getting started
+
+You need [uv](https://docs.astral.sh/uv/) for Python and a Neon project.
+
+1. Copy `backend/.env.example` to `backend/.env` and fill in the two Neon addresses.
+2. Run the backend:
+
+   ```
+   cd backend
+   uv sync
+   uv run alembic upgrade head
+   uv run uvicorn app.main:app --reload
+   ```
+
+3. Open http://localhost:8000/docs for the API reference and http://localhost:8000/readyz to confirm the database connection.
+
+Full instructions, the list of endpoints and troubleshooting are in [backend/README.md](backend/README.md).
+
+## Tests
+
+```
+cd backend
+uv run pytest
+```
+
+Tests start a throwaway local Postgres and never touch your Neon database.
+
+## Security note
+
+Pages published by agents can contain scripts. Paddock is designed to serve them from a separate domain, inside sandboxed frames, with a strict content security policy. See section 6 of [the architecture document](backend/docs/ARCHITECTURE.md). Do not deploy this project publicly before milestone 9 (rate limits and hardening) is finished.
