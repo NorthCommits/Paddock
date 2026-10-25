@@ -2,11 +2,12 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
-import { FileText, KeyRound, LogOut, PlugZap, Plus, UserRound } from "lucide-react";
+import { FileText, KeyRound, LogOut, Moon, Palette as PaletteIcon, PlugZap, Plus, Shield, Sun, Upload, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { api, setCsrf } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 
 function Row({ icon, children, onSelect }: { icon: ReactNode; children: ReactNode; onSelect: () => void }) {
   return (
@@ -23,6 +24,7 @@ function Row({ icon, children, onSelect }: { icon: ReactNode; children: ReactNod
 export function Palette() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const [, setTheme] = useTheme();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -69,11 +71,16 @@ export function Palette() {
               <Command.Group heading="Go to" className={group}>
                 <Row icon={<FileText />} onSelect={() => go("/pages")}>Pages</Row>
                 <Row icon={<PlugZap />} onSelect={() => go("/connect")}>Connect an agent</Row>
+                <Row icon={<UserRound />} onSelect={() => go("/settings/profile")}>Profile</Row>
+                <Row icon={<PaletteIcon />} onSelect={() => go("/settings/appearance")}>Appearance</Row>
+                <Row icon={<Shield />} onSelect={() => go("/settings/security")}>Security</Row>
                 <Row icon={<KeyRound />} onSelect={() => go("/settings/tokens")}>Tokens</Row>
-                <Row icon={<UserRound />} onSelect={() => go("/settings/account")}>Account</Row>
               </Command.Group>
               <Command.Group heading="Actions" className={group}>
+                <Row icon={<Upload />} onSelect={() => go("/pages?new=1")}>Upload a page</Row>
                 <Row icon={<Plus />} onSelect={() => go("/settings/tokens?new=1")}>Create a token</Row>
+                <Row icon={<Sun />} onSelect={() => { setTheme("light"); setOpen(false); }}>Light theme</Row>
+                <Row icon={<Moon />} onSelect={() => { setTheme("dark"); setOpen(false); }}>Dark theme</Row>
                 <Row icon={<LogOut />} onSelect={signOut}>Sign out</Row>
               </Command.Group>
             </Command.List>

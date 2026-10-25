@@ -28,6 +28,24 @@ class Settings(BaseSettings):
     max_file_bytes: int = 10 * 1024 * 1024
     max_files: int = 200
 
+    # Where uploaded files live. Only local disk is built so far (see SDD section 8).
+    storage_backend: str = "local"
+    storage_local_path: str = "storage"
+
+    # How long a signed link to published content stays valid.
+    content_token_minutes: int = 15
+
+    # Email. "console" only logs messages (development). "smtp" sends them for real.
+    email_backend: str = "console"
+    email_from: str = "Paddock <noreply@localhost>"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_security: str = "starttls"  # starttls, ssl or none
+    verify_email_hours: int = 24
+    reset_password_minutes: int = 60
+
     @property
     def cookie_secure(self) -> bool:
         """Browsers only send secure cookies over HTTPS, so switch it off for local work."""
@@ -41,6 +59,14 @@ class Settings(BaseSettings):
     def _require_real_secret_in_production(self) -> "Settings":
         if self.environment == "production" and self.secret_key == DEV_SECRET:
             raise ValueError("SECRET_KEY must be set in production")
+        if self.email_backend not in ("console", "smtp"):
+            raise ValueError("EMAIL_BACKEND must be console or smtp")
+        if self.smtp_security not in ("starttls", "ssl", "none"):
+            raise ValueError("SMTP_SECURITY must be starttls, ssl or none")
+        if self.email_backend == "smtp" and not self.smtp_host:
+            raise ValueError("SMTP_HOST must be set when EMAIL_BACKEND is smtp")
+        if self.environment == "production" and self.email_backend != "smtp":
+            raise ValueError("EMAIL_BACKEND must be smtp in production")
         return self
 
 

@@ -23,14 +23,19 @@ TEST_DB_URL = _start_test_database()
 os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ["DATABASE_URL_UNPOOLED"] = TEST_DB_URL
 os.environ["ENVIRONMENT"] = "test"
+STORAGE_DIR = tempfile.mkdtemp(prefix="paddock_test_files_")
+os.environ["STORAGE_LOCAL_PATH"] = STORAGE_DIR
+atexit.register(shutil.rmtree, STORAGE_DIR, ignore_errors=True)
 
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
+from app.content import app as content_app  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_engine, get_session  # noqa: E402
 from app.main import app  # noqa: E402
+from app.services import mailer  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -53,6 +58,15 @@ async def _empty_tables():
 async def client():
     """A client talking to the app with the real test database."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+
+
+@pytest.fixture
+async def content_client():
+    """A client talking to the content gateway (a separate app, like in production)."""
+    async with AsyncClient(
+        transport=ASGITransport(app=content_app), base_url="http://content"
+    ) as c:
         yield c
 
 
@@ -81,3 +95,11 @@ async def fake_client(fake_session):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def outbox():
+    """Every test gets an empty in-memory mailbox instead of real email."""
+    box = mailer.MemoryMailer()
+    mailer.set_mailer(box)
+    return box

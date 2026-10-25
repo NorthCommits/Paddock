@@ -4,6 +4,7 @@ export type User = {
   handle: string;
   display_name: string;
   created_at: string;
+  email_verified_at: string | null;
 };
 
 export type Me = { user: User; scopes: string[]; csrf_token: string | null };
@@ -17,6 +18,47 @@ export type TokenRow = {
   last_used_at: string | null;
   expires_at: string | null;
   revoked_at: string | null;
+};
+
+export type Version = {
+  id: string;
+  number: number;
+  message: string | null;
+  entry_path: string;
+  total_bytes: number;
+  file_count: number;
+  rolled_back_from: number | null;
+  author_user_id: string | null;
+  by_agent: boolean;
+  created_at: string;
+};
+
+export type VersionFile = { path: string; sha256: string; size_bytes: number; content_type: string };
+
+export type Page = {
+  id: string;
+  slug: string;
+  title: string;
+  visibility: string;
+  owner_handle: string;
+  current_version: Version | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PageList = { items: Page[]; next_cursor: string | null };
+export type VersionList = { items: Version[]; next_cursor: string | null };
+export type Publish = { page: Page; version: Version; created: boolean };
+export type ViewUrl = { url: string; expires_at: string };
+
+export type BrowserSession = {
+  id: string;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  user_agent: string | null;
+  ip: string | null;
+  current: boolean;
 };
 
 export type TokenCreated = TokenRow & { token: string };
@@ -45,7 +87,10 @@ export const setCsrf = (value: string | null) => {
   csrf = value;
 };
 
-export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function api<T>(
+  path: string,
+  init: { method?: string; body?: unknown; form?: FormData } = {},
+): Promise<T> {
   const method = init.method ?? "GET";
   const headers: Record<string, string> = {};
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
@@ -57,7 +102,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
       method,
       headers,
       credentials: "same-origin",
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      body: init.form ?? (init.body !== undefined ? JSON.stringify(init.body) : undefined),
     });
   } catch {
     throw new ApiError(0, "network", "Cannot reach Paddock. Check your connection and try again.");

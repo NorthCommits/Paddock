@@ -1,0 +1,113 @@
+"use client";
+
+import { LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import useSWR from "swr";
+import { Section } from "@/components/section";
+import { ResendVerification } from "@/components/resend-verification";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError, api, fetchMe, setCsrf } from "@/lib/api";
+import type { User } from "@/lib/api";
+import { day } from "@/lib/format";
+
+export default function Page() {
+  const router = useRouter();
+  const { data: me, mutate } = useSWR("me", fetchMe);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (me) setName(me.user.display_name);
+  }, [me]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return setMsg({ ok: false, text: "Name cannot be empty." });
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api<User>("/v1/me", { method: "PATCH", body: { display_name: name.trim() } });
+      await mutate();
+      setMsg({ ok: true, text: "Saved." });
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof ApiError ? err.message : "Something went wrong. Try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signOut() {
+    await api("/v1/auth/logout", { method: "POST" }).catch(() => undefined);
+    setCsrf(null);
+    router.push("/login");
+  }
+
+  if (!me) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
+  const initial = (me.user.display_name || me.user.handle).slice(0, 1).toUpperCase();
+  const changed = name.trim() !== me.user.display_name;
+
+  return (
+    <>
+      <div className="mb-8 flex items-center gap-4">
+        <span className="flex size-16 items-center justify-center rounded-full bg-primary-soft text-[26px] font-semibold text-primary">
+          {initial}
+        </span>
+        <div>
+          <p className="text-[17px] font-semibold text-foreground">{me.user.display_name}</p>
+          <p className="text-[13px] text-muted-foreground">@{me.user.handle} · Member since {day(me.user.created_at)}</p>
+        </div>
+      </div>
+
+      <Section title="Profile" hint="Your name is shown to people you share pages with.">
+        <form onSubmit={save} className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-card" noValidate>
+          <Field id="display-name" label="Display name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
+          <Field id="handle" label="Username" value={`@${me.user.handle}`} readOnly disabled hint="Your username appears in page links and cannot be changed yet." />
+          <div>
+            <Field id="email" label="Email" value={me.user.email} readOnly disabled />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {me.user.email_verified_at ? (
+                <Badge variant="success">Verified {day(me.user.email_verified_at)}</Badge>
+              ) : (
+                <>
+                  <Badge>Not verified</Badge>
+                  <ResendVerification variant="ghost" />
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={busy || !changed}>{busy ? "Saving" : "Save changes"}</Button>
+            {msg && (
+              <p role={msg.ok ? "status" : "alert"} className={msg.ok ? "text-[13px] text-primary" : "text-[13px] text-destructive"}>
+                {msg.text}
+              </p>
+            )}
+          </div>
+        </form>
+      </Section>
+
+      <Section title="Session">
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 shadow-card">
+          <p className="text-[13px] text-muted-foreground">Sign out of Paddock on this device.</p>
+          <Button variant="secondary" onClick={signOut}>
+            <LogOut aria-hidden="true" /> Sign out
+          </Button>
+        </div>
+      </Section>
+    </>
+  );
+}

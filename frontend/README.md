@@ -55,3 +55,20 @@ docs/DESIGN.md        design contract
 ## Brand
 
 The mark is an original "Gate P": a geometric P whose bowl has an open gate. Sources are in `brand/`, exports in `public/brand/`.
+
+## Screens (milestone 3)
+
+| Route | What it does |
+|---|---|
+| `/pages` | List of your pages, upload a new page (files or a folder), delete |
+| `/pages/{id}` | Page viewer in a sandboxed frame, version history, restore a version, publish a new version, rename |
+| `/forgot-password`, `/reset-password`, `/verify-email` | Public screens for the emailed links. A banner in the app asks unverified people to confirm and lets them resend |
+| `/settings/profile` | Edit display name, see username and email, sign out |
+| `/settings/appearance` | Light, dark or system theme (stored in this browser) |
+| `/settings/security` | Change password, see and end browser sessions |
+| `/settings/tokens` | Create and revoke agent tokens |
+
+The viewer asks the API for a short-lived view link and loads it in an iframe from the content server, so
+run `uv run uvicorn app.content:app --port 8001` in `backend/` next to the API. The link is refreshed every
+12 minutes. The frame uses `sandbox="allow-scripts allow-same-origin ..."`, which is safe only because the content
+origin is a different origin from the app. Keep it that way in production (a separate domain).

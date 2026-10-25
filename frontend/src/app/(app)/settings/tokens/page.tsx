@@ -44,9 +44,9 @@ function Tokens() {
   }
 
   return (
-    <div className="max-w-[640px]">
+    <div>
       <div className="flex items-center justify-between">
-        <h1 className="text-[22px] font-semibold leading-7 text-foreground">Tokens</h1>
+        <h2 className="text-[15px] font-semibold text-foreground">Agent tokens</h2>
         <Button onClick={() => setCreating(true)}>New token</Button>
       </div>
       <p className="mt-2 text-[13px] text-muted-foreground">Agents use tokens to act for you. Revoke a token to cut off an agent.</p>

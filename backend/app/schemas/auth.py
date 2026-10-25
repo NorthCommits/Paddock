@@ -50,6 +50,7 @@ class UserOut(BaseModel):
     handle: str
     display_name: str
     created_at: datetime
+    email_verified_at: datetime | None
 
 
 class SessionOut(BaseModel):
@@ -92,3 +93,48 @@ class TokenOut(BaseModel):
 
 class TokenCreatedOut(TokenOut):
     token: str  # shown only once, at creation
+
+
+class ProfileUpdate(BaseModel):
+    display_name: str = Field(min_length=1, max_length=100)
+
+    @field_validator("display_name")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("name cannot be empty")
+        return value
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+
+class BrowserSessionOut(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    last_seen_at: datetime
+    expires_at: datetime
+    user_agent: str | None
+    ip: str | None
+    current: bool
+
+
+class VerifyEmailIn(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+
+
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def _lower_email(cls, value: str) -> str:
+        return value.lower()
+
+
+class ResetPasswordIn(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+    new_password: str = Field(min_length=10, max_length=128)

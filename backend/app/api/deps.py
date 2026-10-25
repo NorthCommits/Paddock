@@ -78,3 +78,24 @@ def require_scope(scope: str):
         return actor
 
     return check
+
+
+async def get_verified_actor(actor: ActorDep) -> Actor:
+    """For actions that need a confirmed email address (publishing, creating tokens)."""
+    if actor.user.email_verified_at is None:
+        raise AppError(
+            403,
+            "email_not_verified",
+            "Verify your email address first. Check your inbox or resend the email.",
+        )
+    return actor
+
+
+VerifiedActorDep = Annotated[Actor, Depends(get_verified_actor)]
+
+
+async def get_verified_session_actor(actor: SessionActorDep) -> Actor:
+    return await get_verified_actor(actor)
+
+
+VerifiedSessionActorDep = Annotated[Actor, Depends(get_verified_session_actor)]

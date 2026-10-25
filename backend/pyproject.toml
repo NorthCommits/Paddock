@@ -38,5 +38,8 @@ line-length = 100
 extend-exclude = ["migrations/versions"]
 target-version = "py312"
 
+[tool.ruff.lint.per-file-ignores]
+"app/services/emails.py" = ["E501"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
