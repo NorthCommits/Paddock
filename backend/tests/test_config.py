@@ -21,15 +21,15 @@ def test_production_accepts_a_real_secret():
     assert s.environment == "production"
 
 
-def test_production_needs_real_email_sending():
-    with pytest.raises(ValueError):
-        Settings(
-            _env_file=None,
-            database_url="postgresql://u:p@h/db",
-            environment="production",
-            secret_key="x" * 40,
-            neon_auth_url="https://auth.example.com/db/auth",
-        )
+def test_production_may_log_emails_instead_of_sending():
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql://u:p@h/db",
+        environment="production",
+        secret_key="x" * 40,
+        neon_auth_url="https://auth.example.com/db/auth",
+    )
+    assert settings.email_backend == "console"
 
 
 def test_production_needs_the_neon_auth_address():

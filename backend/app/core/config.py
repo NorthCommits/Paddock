@@ -27,9 +27,16 @@ class Settings(BaseSettings):
     max_file_bytes: int = 10 * 1024 * 1024
     max_files: int = 200
 
-    # Where uploaded files live. Only local disk is built so far (see SDD section 8).
+    # Where uploaded files live: "local" (a folder on disk) or "s3" (any S3-compatible bucket,
+    # such as Cloudflare R2, Backblaze B2 or Supabase Storage). Use s3 when hosting, because
+    # free hosts wipe the disk on restart.
     storage_backend: str = "local"
     storage_local_path: str = "storage"
+    s3_bucket: str | None = None
+    s3_endpoint_url: str | None = None
+    s3_region: str = "auto"
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
 
     # How long a signed link to published content stays valid.
     content_token_minutes: int = 15
@@ -64,10 +71,22 @@ class Settings(BaseSettings):
             raise ValueError("SMTP_SECURITY must be starttls, ssl or none")
         if self.email_backend == "smtp" and not self.smtp_host:
             raise ValueError("SMTP_HOST must be set when EMAIL_BACKEND is smtp")
+        if self.storage_backend not in ("local", "s3"):
+            raise ValueError("STORAGE_BACKEND must be local or s3")
+        if self.storage_backend == "s3" and not (
+            self.s3_bucket
+            and self.s3_endpoint_url
+            and self.s3_access_key_id
+            and self.s3_secret_access_key
+        ):
+            raise ValueError(
+                "S3_BUCKET, S3_ENDPOINT_URL, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY "
+                "must be set when STORAGE_BACKEND is s3"
+            )
         if self.environment == "production" and not self.neon_auth_url:
             raise ValueError("NEON_AUTH_URL must be set in production")
-        if self.environment == "production" and self.email_backend != "smtp":
-            raise ValueError("EMAIL_BACKEND must be smtp in production")
+        # EMAIL_BACKEND may stay "console" in production. Invitation emails are then only
+        # logged, and the invite link is still shown to the person who created it.
         return self
 
 
