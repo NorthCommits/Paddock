@@ -85,8 +85,8 @@ class Settings(BaseSettings):
             )
         if self.environment == "production" and not self.neon_auth_url:
             raise ValueError("NEON_AUTH_URL must be set in production")
-        if self.environment == "production" and self.email_backend != "smtp":
-            raise ValueError("EMAIL_BACKEND must be smtp in production")
+        # EMAIL_BACKEND may stay "console" in production. Invitation emails are then only
+        # logged, and the invite link is still shown to the person who created it.
         return self
 
 
