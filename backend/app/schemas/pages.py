@@ -1,6 +1,7 @@
 import re
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -47,6 +48,7 @@ class VersionFields(BaseModel):
 class PageUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     slug: str | None = None
+    visibility: Literal["private", "members", "link"] | None = None
 
     @field_validator("slug")
     @classmethod
@@ -90,6 +92,7 @@ class PageOut(BaseModel):
     title: str
     visibility: str
     owner_handle: str
+    role: str  # the caller's role on this page: owner, editor, commenter or viewer
     current_version: VersionOut | None
     created_at: datetime
     updated_at: datetime

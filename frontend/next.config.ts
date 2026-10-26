@@ -4,7 +4,8 @@ const backend = process.env.BACKEND_URL ?? "http://localhost:8000";
 
 const config: NextConfig = {
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${backend}/:path*` }];
+    // Only our own API goes to the backend. /api/auth is handled by Neon Auth's route handler.
+    return [{ source: "/api/v1/:path*", destination: `${backend}/v1/:path*` }];
   },
 };
 

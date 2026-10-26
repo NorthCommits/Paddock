@@ -13,10 +13,11 @@ from tests.conftest import TEST_DB_URL
 BACKEND = Path(__file__).resolve().parents[1]
 EXPECTED_TABLES = {
     "users",
-    "sessions",
     "api_tokens",
     "audit_log",
-    "email_tokens",
+    "page_members",
+    "page_invites",
+    "share_links",
     "blobs",
     "pages",
     "page_versions",

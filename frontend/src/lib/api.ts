@@ -7,7 +7,15 @@ export type User = {
   email_verified_at: string | null;
 };
 
-export type Me = { user: User; scopes: string[]; csrf_token: string | null };
+export type Me = { user: User; scopes: string[] };
+
+export type Onboarding = {
+  needs_onboarding: boolean;
+  email: string;
+  name: string | null;
+  suggestions: string[];
+};
+export type HandleCheck = { handle: string; available: boolean; reason: string | null };
 
 export type TokenRow = {
   id: string;
@@ -18,6 +26,61 @@ export type TokenRow = {
   last_used_at: string | null;
   expires_at: string | null;
   revoked_at: string | null;
+};
+
+export type Role = "owner" | "editor" | "commenter" | "viewer";
+export type MemberRole = "viewer" | "commenter" | "editor";
+export type Visibility = "private" | "members" | "link";
+
+export type Member = {
+  user_id: string;
+  handle: string;
+  display_name: string;
+  email: string;
+  role: MemberRole;
+  created_at: string;
+};
+
+export type Invite = {
+  id: string;
+  email: string;
+  role: MemberRole;
+  created_at: string;
+  expires_at: string;
+  expired: boolean;
+};
+export type InviteCreated = Invite & { accept_url: string; emailed: boolean };
+export type InvitePreview = {
+  page_title: string;
+  owner_handle: string;
+  invited_by: string | null;
+  email: string;
+  role: MemberRole;
+  expires_at: string;
+};
+
+export type ShareLinkRow = {
+  id: string;
+  role: "viewer" | "commenter";
+  created_at: string;
+  expires_at: string | null;
+  expired: boolean;
+};
+export type ShareLinkCreated = ShareLinkRow & { url: string };
+export type Shared = {
+  page_id: string;
+  title: string;
+  owner_handle: string;
+  role: "viewer" | "commenter";
+  version_number: number | null;
+  updated_at: string;
+};
+
+export const ROLE_LABEL: Record<Role, string> = {
+  owner: "Owner",
+  editor: "Can edit",
+  commenter: "Can comment",
+  viewer: "Can view",
 };
 
 export type Version = {
@@ -41,6 +104,7 @@ export type Page = {
   title: string;
   visibility: string;
   owner_handle: string;
+  role: Role;
   current_version: Version | null;
   created_at: string;
   updated_at: string;
@@ -50,16 +114,6 @@ export type PageList = { items: Page[]; next_cursor: string | null };
 export type VersionList = { items: Version[]; next_cursor: string | null };
 export type Publish = { page: Page; version: Version; created: boolean };
 export type ViewUrl = { url: string; expires_at: string };
-
-export type BrowserSession = {
-  id: string;
-  created_at: string;
-  last_seen_at: string;
-  expires_at: string;
-  user_agent: string | null;
-  ip: string | null;
-  current: boolean;
-};
 
 export type TokenCreated = TokenRow & { token: string };
 
@@ -82,10 +136,43 @@ export class ApiError extends Error {
   }
 }
 
-let csrf: string | null = null;
-export const setCsrf = (value: string | null) => {
-  csrf = value;
-};
+// The sign-in token Neon issues with the session (a short-lived JWT). Kept in memory and renewed a minute
+// before it runs out, so most requests do not need an extra call.
+let cached: { token: string; expires: number } | null = null;
+
+export function forgetToken() {
+  cached = null;
+}
+
+const looksLikeJwt = (value: unknown): value is string =>
+  typeof value === "string" && value.split(".").length === 3;
+
+async function fetchToken(): Promise<string | null> {
+  const { authClient } = await import("./auth/client");
+  // Neon sends the JWT with the session, and the SDK puts it in session.token.
+  const res = await authClient.getSession();
+  const fromSession = res.data?.session?.token;
+  if (looksLikeJwt(fromSession)) return fromSession;
+  // Otherwise ask Neon for one directly. Our server passes this call on.
+  const direct = await fetch("/api/auth/token", { credentials: "same-origin" });
+  if (!direct.ok) return null;
+  const body = await direct.json().catch(() => null);
+  return looksLikeJwt(body?.token) ? body.token : null;
+}
+
+async function bearer(): Promise<string | null> {
+  if (cached && cached.expires - 60_000 > Date.now()) return cached.token;
+  try {
+    const token = await fetchToken();
+    if (!token) return null;
+    const exp = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).exp;
+    cached = { token, expires: exp * 1000 };
+    return token;
+  } catch (err) {
+    console.warn("Could not get the sign-in token", err);
+    return null;
+  }
+}
 
 export async function api<T>(
   path: string,
@@ -94,7 +181,8 @@ export async function api<T>(
   const method = init.method ?? "GET";
   const headers: Record<string, string> = {};
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
-  if (method !== "GET" && csrf) headers["X-CSRF-Token"] = csrf;
+  const token = await bearer();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
   let res: Response;
   try {
@@ -118,7 +206,5 @@ export async function api<T>(
 }
 
 export async function fetchMe(): Promise<Me> {
-  const me = await api<Me>("/v1/me");
-  setCsrf(me.csrf_token);
-  return me;
+  return api<Me>("/v1/me");
 }

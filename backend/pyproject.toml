@@ -11,7 +11,8 @@ dependencies = [
     "alembic>=1.13",
     "pydantic-settings>=2.4",
     "email-validator>=2.2",
-    "argon2-cffi>=23.1",
+    "pyjwt[crypto]>=2.9",
+    "certifi>=2024.8.30",
     "python-multipart>=0.0.9",
 ]
 
@@ -40,6 +41,7 @@ target-version = "py312"
 
 [tool.ruff.lint.per-file-ignores]
 "app/services/emails.py" = ["E501"]
+"tests/test_sharing.py" = ["E501", "E741"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

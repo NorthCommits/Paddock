@@ -15,9 +15,10 @@ Design documents are in [`docs/`](docs): [PRD](docs/PRD.md), [Architecture](docs
 | Versions | `POST /v1/pages/{id}/versions`, `GET /v1/pages/{id}/versions`, `GET /v1/pages/{id}/versions/{n}`, `POST /v1/pages/{id}/versions/{n}/rollback` |
 | Email | `POST /v1/auth/verify-email`, `POST /v1/auth/forgot-password`, `POST /v1/auth/reset-password`, `POST /v1/me/verification/resend` |
 | Profile | `PATCH /v1/me`, `POST /v1/me/password`, `GET /v1/me/sessions`, `DELETE /v1/me/sessions/{id}`, `POST /v1/me/sessions/revoke-others` |
+| Sharing | `GET/POST /v1/pages/{id}/invites`, `GET/POST /v1/pages/{id}/links`, `GET /v1/pages/{id}/members`, role changes, removal, `POST /v1/invites/{token}/accept`, `GET /v1/shared/{token}` |
 | Viewing | `POST /v1/pages/{id}/view-url`, then open the URL on the content server |
 
-Sharing, comments, requests and real-time streams are planned in later milestones (see SDD section 13).
+Comments, requests and real-time streams are planned in later milestones (see SDD section 13).
 
 ## Requirements
 

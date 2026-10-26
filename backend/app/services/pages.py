@@ -5,7 +5,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.policy import allowed
 from app.core.signing import make_content_token
-from app.db.models import Blob, Page, PageVersion, User, VersionFile
+from app.db.models import Blob, Page, PageMember, PageVersion, User, VersionFile
 from app.schemas.pages import PageOut, VersionDetailOut, VersionOut
 from app.services import audit
 from app.services.bundles import CheckedFile, fingerprint
@@ -28,9 +28,19 @@ def _now() -> datetime:
 # ---------------------------------------------------------------- access
 
 
-def role_for(page: Page, user: User) -> str | None:
-    """The person's role on a page. Only owners exist until sharing arrives in milestone 4."""
-    return "owner" if page.owner_id == user.id else None
+async def role_for(db: AsyncSession, page: Page, user: User) -> str | None:
+    """The person's role on a page.
+
+    The owner always has full rights. Members count while the page is shared with members
+    or by link. A private page is for its owner alone, whatever the member list says.
+    """
+    if page.owner_id == user.id:
+        return "owner"
+    if page.visibility == "private":
+        return None
+    return await db.scalar(
+        select(PageMember.role).where(PageMember.page_id == page.id, PageMember.user_id == user.id)
+    )
 
 
 async def get_for_actor(
@@ -41,7 +51,7 @@ async def get_for_actor(
     if lock:
         query = query.with_for_update()
     page = await db.scalar(query)
-    role = role_for(page, actor.user) if page else None
+    role = await role_for(db, page, actor.user) if page else None
     if page is None or role is None:
         raise AppError(404, "not_found", "Page not found")
     if not allowed(action, role, actor.scopes):
@@ -102,7 +112,7 @@ async def _version_outs(
     }
 
 
-async def page_outs(db: AsyncSession, pages: list[Page]) -> list[PageOut]:
+async def page_outs(db: AsyncSession, pages: list[Page], user: User) -> list[PageOut]:
     version_ids = [p.current_version_id for p in pages if p.current_version_id]
     versions = (
         list(await db.scalars(select(PageVersion).where(PageVersion.id.in_(version_ids))))
@@ -116,6 +126,14 @@ async def page_outs(db: AsyncSession, pages: list[Page]) -> list[PageOut]:
             select(User.id, User.handle).where(User.id.in_({p.owner_id for p in pages}))
         )
     }
+    member_roles = {
+        row.page_id: row.role
+        for row in await db.execute(
+            select(PageMember.page_id, PageMember.role).where(
+                PageMember.user_id == user.id, PageMember.page_id.in_([p.id for p in pages])
+            )
+        )
+    }
     return [
         PageOut(
             id=p.id,
@@ -123,6 +141,7 @@ async def page_outs(db: AsyncSession, pages: list[Page]) -> list[PageOut]:
             title=p.title,
             visibility=p.visibility,
             owner_handle=owners.get(p.owner_id, ""),
+            role="owner" if p.owner_id == user.id else member_roles.get(p.id, "viewer"),
             current_version=outs.get(p.current_version_id) if p.current_version_id else None,
             created_at=p.created_at,
             updated_at=p.updated_at,
@@ -131,8 +150,8 @@ async def page_outs(db: AsyncSession, pages: list[Page]) -> list[PageOut]:
     ]
 
 
-async def page_out(db: AsyncSession, page: Page) -> PageOut:
-    return (await page_outs(db, [page]))[0]
+async def page_out(db: AsyncSession, page: Page, user: User) -> PageOut:
+    return (await page_outs(db, [page], user))[0]
 
 
 async def version_out(db: AsyncSession, version: PageVersion) -> VersionOut:
@@ -374,7 +393,14 @@ def _decode_cursor(cursor: str, count: int) -> list[str]:
 async def list_pages(
     db: AsyncSession, actor, *, limit: int, cursor: str | None, slug: str | None
 ) -> tuple[list[Page], str | None]:
-    query = select(Page).where(Page.owner_id == actor.user.id, Page.deleted_at.is_(None))
+    shared_with_me = select(PageMember.page_id).where(PageMember.user_id == actor.user.id)
+    query = select(Page).where(
+        Page.deleted_at.is_(None),
+        or_(
+            Page.owner_id == actor.user.id,
+            and_(Page.visibility != "private", Page.id.in_(shared_with_me)),
+        ),
+    )
     if slug:
         query = query.where(Page.slug == slug)
     if cursor:
@@ -442,10 +468,14 @@ async def update_page(
     *,
     title: str | None,
     slug: str | None,
+    visibility: str | None = None,
     ip: str | None,
 ) -> Page:
     page = await get_for_actor(db, actor, page_id, "page.update", lock=True)
     changes = {}
+    if visibility and visibility != page.visibility:
+        page.visibility = visibility
+        changes["visibility"] = visibility
     if title is not None and title.strip() and title.strip() != page.title:
         page.title = title.strip()
         changes["title"] = page.title
@@ -496,6 +526,11 @@ async def view_url(
     db: AsyncSession, actor, page_id: uuid.UUID, number: int | None
 ) -> tuple[str, datetime]:
     page = await get_for_actor(db, actor, page_id, "page.view")
+    return await view_url_for(db, page, number)
+
+
+async def view_url_for(db: AsyncSession, page: Page, number: int | None) -> tuple[str, datetime]:
+    """A signed content link for a page the caller is already allowed to see."""
     if number is None:
         if page.current_version_id is None:
             raise AppError(404, "not_found", "This page has no versions yet")

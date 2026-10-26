@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
+import { ROLE_LABEL, api } from "@/lib/api";
 import type { Page, PageList } from "@/lib/api";
 import { ago } from "@/lib/format";
 
@@ -131,12 +131,19 @@ function Pages() {
                   </Link>
                   <p className="mt-0.5 flex items-center gap-1.5 truncate text-[12px] text-muted-foreground">
                     <span className="font-mono">{p.slug}</span>
+                    {p.role !== "owner" && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span>by @{p.owner_handle}</span>
+                      </>
+                    )}
                     <span aria-hidden="true">·</span>
                     <span>Updated {ago(p.updated_at)}</span>
                   </p>
                 </div>
                 {p.current_version && (
                   <div className="flex shrink-0 items-center gap-2">
+                    {p.role !== "owner" && <Badge>{ROLE_LABEL[p.role]}</Badge>}
                     <Badge>
                       {p.current_version.by_agent ? <Bot size={12} aria-hidden="true" /> : <User size={12} aria-hidden="true" />}
                       {p.current_version.by_agent ? "Agent" : "You"}
@@ -144,6 +151,7 @@ function Pages() {
                     <Badge variant="success">v{p.current_version.number}</Badge>
                   </div>
                 )}
+                {p.role === "owner" && (
                 <button
                   aria-label={`Delete ${p.title}`}
                   onClick={() => setDeleting(p)}
@@ -151,6 +159,7 @@ function Pages() {
                 >
                   <Trash2 size={16} />
                 </button>
+                )}
               </motion.li>
             ))}
           </AnimatePresence>

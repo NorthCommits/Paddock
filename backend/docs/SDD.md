@@ -148,12 +148,21 @@ Only the main contract is listed here. The OpenAPI schema generated from the cod
 ### 4.3 Sharing
 | Method and path | Purpose |
 |---|---|
-| GET /v1/pages/{id}/members | List members. |
-| POST /v1/pages/{id}/invites | Invite by email with a role. |
-| DELETE /v1/pages/{id}/members/{user_id} | Remove a member. |
-| POST /v1/invites/{token}/accept | Accept an invitation. |
-| POST /v1/pages/{id}/links | Create a share link. |
+| GET /v1/pages/{id}/members | List members (owner only). |
+| PATCH /v1/pages/{id}/members/{user_id} | Change a member's role. |
+| DELETE /v1/pages/{id}/members/{user_id} | Remove a member. A member can remove themselves (leave). |
+| POST /v1/pages/{id}/invites | Invite by email with a role. Emails the invitation and returns the accept link once. |
+| GET /v1/pages/{id}/invites | List pending invitations. |
+| DELETE /v1/pages/{id}/invites/{invite_id} | Revoke an invitation. |
+| GET /v1/invites/{token} | Preview an invitation (page title, inviter, role). Needs no login. |
+| POST /v1/invites/{token}/accept | Accept an invitation. Needs a browser session with a confirmed email that matches the invited address. |
+| POST /v1/pages/{id}/links | Create a share link (viewer or commenter, optional expiry). The URL is returned once. |
+| GET /v1/pages/{id}/links | List live share links (never the secret). |
 | DELETE /v1/pages/{id}/links/{link_id} | Revoke a link. |
+| GET /v1/shared/{token} | What a link opens (title, owner, role, version number). Needs no login. |
+| POST /v1/shared/{token}/view-url | A signed content URL for the page's current version. Needs no login. |
+
+Visibility is a ceiling: `private` is the owner only (members and links stay stored but are switched off), `members` adds invited members, `link` also lets share links work. Creating an invitation or link widens the page to at least what it needs. Pages shared with you appear in `GET /v1/pages` with your `role`.
 
 ### 4.4 Comments and requests
 | Method and path | Purpose |
@@ -228,8 +237,8 @@ open --dismiss--> dismissed
 
 ### 5.5 Sharing
 
-- Invites by email: creating an invite stores a hashed token. Delivery of the email is out of scope for v1 (the API returns the accept link so a frontend or owner can send it). A pluggable email sender interface is defined for later.
-- Share links can be revoked and can expire. A link never grants editing rights.
+- Invites by email: creating an invite stores a hashed token, emails the invitation through the mailer and returns the accept link once, so the owner can also send it another way. Invitations last 7 days and work once. Accepting needs an account whose confirmed email is the invited address, so a forwarded link is useless to anyone else. A new invitation to the same address replaces the old one.
+- Share links can be revoked and can expire. A link never grants editing rights. A link stops working when the page is not set to `link`, is deleted, or the link is revoked or expired; all of these give the same 404. Limits per page: 50 members, 50 pending invitations, 20 live links.
 - Link pages are served with `X-Robots-Tag: noindex`.
 
 ## 6. Event system

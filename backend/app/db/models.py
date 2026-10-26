@@ -38,46 +38,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True)  # always stored lowercase
     handle: Mapped[str] = mapped_column(String(30), unique=True)  # used in page URLs
     display_name: Mapped[str] = mapped_column(String(100))
-    password_hash: Mapped[str] = mapped_column(Text)
+    neon_auth_id: Mapped[str] = mapped_column(String(100), unique=True)  # Neon Auth user id
     created_at: Mapped[datetime] = _now_column()
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class EmailToken(Base):
-    """A single-use link sent by email: verify an address or reset a password.
-
-    Only a hash of the token is stored, like sessions and API tokens.
-    """
-
-    __tablename__ = "email_tokens"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    purpose: Mapped[str] = mapped_column(String(20))  # "verify" or "reset"
-    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
-    created_at: Mapped[datetime] = _now_column()
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-    __table_args__ = (Index("ix_email_tokens_user_id_purpose", "user_id", "purpose"),)
-
-
-class UserSession(Base):
-    """A browser login. Only a hash of the cookie value is stored."""
-
-    __tablename__ = "sessions"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
-    created_at: Mapped[datetime] = _now_column()
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    last_seen_at: Mapped[datetime] = _now_column()
-    user_agent: Mapped[str | None] = mapped_column(String(300))
-    ip: Mapped[str | None] = mapped_column(String(45))
-
-    __table_args__ = (Index("ix_sessions_user_id", "user_id"),)
 
 
 class ApiToken(Base):
@@ -159,6 +123,64 @@ class Page(Base):
             postgresql_where=text("deleted_at is null"),
         ),
     )
+
+
+class PageMember(Base):
+    """A person who was given access to someone else's page."""
+
+    __tablename__ = "page_members"
+
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(20))  # viewer, commenter or editor
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (
+        PrimaryKeyConstraint("page_id", "user_id"),
+        Index("ix_page_members_user_id", "user_id"),
+    )
+
+
+class PageInvite(Base):
+    """An invitation sent to an email address. Only a hash of the token is stored."""
+
+    __tablename__ = "page_invites"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    email: Mapped[str] = mapped_column(String(320))  # lowercase
+    role: Mapped[str] = mapped_column(String(20))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _now_column()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index("ix_page_invites_page_id", "page_id"),)
+
+
+class ShareLink(Base):
+    """A secret link that lets anyone who holds it open the page. Never grants editing."""
+
+    __tablename__ = "share_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    role: Mapped[str] = mapped_column(String(20))  # viewer or commenter
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = _now_column()
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index("ix_share_links_page_id", "page_id"),)
 
 
 class PageVersion(Base):

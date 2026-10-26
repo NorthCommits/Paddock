@@ -8,12 +8,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import useSWR from "swr";
-import { ApiError, api, fetchMe, setCsrf } from "@/lib/api";
+import { ApiError, fetchMe } from "@/lib/api";
+import { signOutNow } from "@/lib/auth/session";
 import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Wordmark } from "./brand";
 import { Palette } from "./Palette";
-import { ResendVerification } from "./resend-verification";
+import { LinkButton } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 
 const nav = [
@@ -27,13 +28,17 @@ export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const { data: me, error } = useSWR("me", fetchMe, { shouldRetryOnError: false });
+  const [theme, setTheme] = useTheme();
 
   useEffect(() => {
-    if (error instanceof ApiError && error.status === 401) router.replace("/login");
-  }, [error, router]);
+    if (!(error instanceof ApiError)) return;
+    if (error.status === 401) router.replace("/login");
+    if (error.code === "onboarding_required") router.replace(`/welcome?next=${encodeURIComponent(path)}`);
+  }, [error, router, path]);
   useEffect(() => setOpen(false), [path]);
 
-  if (error && !(error instanceof ApiError && error.status === 401)) {
+  const redirecting = error instanceof ApiError && (error.status === 401 || error.code === "onboarding_required");
+  if (error && !redirecting) {
     return (
       <div className="p-8 text-[15px] text-foreground">
         <p role="alert">{error.message}</p>
@@ -41,12 +46,10 @@ export function Shell({ children }: { children: ReactNode }) {
     );
   }
 
-  const [theme, setTheme] = useTheme();
   const wide = /^\/pages\/[^/]+$/.test(path);
 
   async function signOut() {
-    await api("/v1/auth/logout", { method: "POST" }).catch(() => undefined);
-    setCsrf(null);
+    await signOutNow();
     router.push("/login");
   }
 
@@ -189,9 +192,11 @@ export function Shell({ children }: { children: ReactNode }) {
           <div role="region" aria-label="Email not confirmed" className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-primary-soft px-4 py-2.5">
             <p className="min-w-0 flex-1 text-[13px] text-foreground">
               <span className="font-medium">Confirm your email to publish pages and create tokens.</span>{" "}
-              <span className="text-muted-foreground">We sent a link to {me.user.email}.</span>
+              <span className="text-muted-foreground">We sent a code to {me.user.email}.</span>
             </p>
-            <ResendVerification />
+            <LinkButton href={`/verify-email?email=${encodeURIComponent(me.user.email)}&next=${encodeURIComponent(path)}`} variant="secondary" size="sm">
+              Enter code
+            </LinkButton>
           </div>
         )}
         <main className={wide ? "min-h-0 w-full flex-1" : "mx-auto w-full max-w-[960px] px-6 py-8"}>{children}</main>

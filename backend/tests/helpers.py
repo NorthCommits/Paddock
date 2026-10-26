@@ -1,36 +1,55 @@
-PASSWORD = "correct horse battery"
-
-
-def link_token(message) -> str:
-    """The token inside the link of an email."""
-    import re
-
-    return re.search(r"token=([A-Za-z0-9_-]+)", message.text).group(1)
-
-
 def mails_to(email: str) -> list:
     from app.services import mailer
 
     return [m for m in mailer.get_mailer().messages if m.to == email]
 
 
-async def signup(client, email="ana@example.com", handle="ana", password=PASSWORD, verify=True):
-    """Create an account. By default also confirm the email, as most tests need that."""
+def mint_token(
+    email: str = "ana@example.com",
+    *,
+    sub: str | None = None,
+    name: str | None = None,
+    verified: bool = True,
+    minutes: int = 15,
+    key=None,
+) -> str:
+    """A sign-in token like the ones Neon Auth issues, signed with the test key."""
+    import time
+
+    import jwt
+
+    from tests.conftest import TEST_PRIVATE_KEY
+
+    now = int(time.time())
+    claims = {
+        "sub": sub or f"neon-{email}",
+        "email": email,
+        "email_verified": verified,
+        "iat": now,
+        "exp": now + minutes * 60,
+    }
+    if name:
+        claims["name"] = name
+    return jwt.encode(claims, key or TEST_PRIVATE_KEY, algorithm="EdDSA", headers={"kid": "test"})
+
+
+async def signup(client, email="ana@example.com", handle="ana", verify=True, name=None):
+    """Create an account the way the app does: sign in with Neon, then choose a handle.
+
+    Returns the user plus the sign-in token. csrf(data) gives the header to send.
+    """
+    token = mint_token(email, verified=verify, name=name)
     response = await client.post(
-        "/v1/auth/signup",
-        json={"email": email, "password": password, "handle": handle},
+        "/v1/onboarding", json={"handle": handle}, headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 201, response.text
-    if verify:
-        done = await client.post(
-            "/v1/auth/verify-email", json={"token": link_token(mails_to(email)[-1])}
-        )
-        assert done.status_code == 204, done.text
-    return response.json()
+    client.headers["Authorization"] = f"Bearer {token}"  # this client now acts as the new user
+    return {"user": response.json(), "token": token, "csrf_token": token}
 
 
 def csrf(data: dict) -> dict:
-    return {"X-CSRF-Token": data["csrf_token"]}
+    """The header that signs a request in as this person. (Name kept from the cookie days.)"""
+    return {"Authorization": f"Bearer {data['token']}"}
 
 
 async def make_token(client, data: dict, scopes=("pages:read",), **extra):

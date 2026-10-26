@@ -1,74 +1,107 @@
 "use client";
 
-import { CircleAlert, CircleCheck, Loader2 } from "lucide-react";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
-import { mutate } from "swr";
+import { MailCheck } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { AuthLayout } from "@/components/AuthLayout";
-import { LinkButton } from "@/components/ui/button";
-import { ApiError, api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/input";
+import { authClient } from "@/lib/auth/client";
+import { authMessage, carryQuery, resetSessionCache, safeNext } from "@/lib/auth/session";
 
-type State = "working" | "ok" | "bad" | "error";
+const COOLDOWN = 60;
 
 function Verify() {
-  const token = useSearchParams().get("token") ?? "";
-  const [state, setState] = useState<State>(token ? "working" : "bad");
-  const [message, setMessage] = useState("");
-  const started = useRef(false);
+  const router = useRouter();
+  const params = useSearchParams();
+  const email = params.get("email") ?? "";
+  const next = safeNext(params.get("next"));
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [wait, setWait] = useState(0);
 
   useEffect(() => {
-    if (!token || started.current) return;
-    started.current = true; // a link works once, so never send it twice
-    api("/v1/auth/verify-email", { method: "POST", body: { token } })
-      .then(async () => {
-        await mutate("me");
-        setState("ok");
-      })
-      .catch((err) => {
-        if (err instanceof ApiError && err.code === "invalid_token") setState("bad");
-        else {
-          setMessage(err instanceof ApiError ? err.message : "Something went wrong.");
-          setState("error");
-        }
-      });
-  }, [token]);
+    if (wait <= 0) return;
+    const t = setTimeout(() => setWait((w) => w - 1), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
 
-  const icon =
-    state === "working" ? (
-      <Loader2 size={24} aria-hidden="true" className="animate-spin" />
-    ) : state === "ok" ? (
-      <CircleCheck size={24} aria-hidden="true" />
-    ) : (
-      <CircleAlert size={24} aria-hidden="true" />
-    );
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!/^\d{4,8}$/.test(code.trim())) return setError("Enter the code from the email.");
+    setBusy(true);
+    setError("");
+    try {
+      const { error } = await authClient.emailOtp.verifyEmail({ email, otp: code.trim() });
+      if (error) throw error;
+      await resetSessionCache();
+      const session = await authClient.getSession();
+      router.push(session.data ? (next ?? "/pages") : `/login${carryQuery(next, email)}`);
+    } catch (err) {
+      setError(authMessage(err as { message?: string }));
+      setBusy(false);
+    }
+  }
 
-  const copy: Record<State, [string, string]> = {
-    working: ["Confirming your email", "One moment."],
-    ok: ["Email confirmed", "You can now publish pages and create agent tokens."],
-    bad: ["This link has expired", "Confirmation links work for 24 hours and only once. Log in and use the banner to get a new one."],
-    error: ["Could not confirm your email", message],
-  };
+  async function resend() {
+    setError("");
+    setNotice("");
+    const { error } = await authClient.emailOtp.sendVerificationOtp({ email, type: "email-verification" });
+    if (error) return setError(authMessage(error));
+    setNotice("A new code is on its way.");
+    setWait(COOLDOWN);
+  }
 
   return (
-    <div>
-      <span className="flex size-12 items-center justify-center rounded-full bg-primary-soft text-primary">{icon}</span>
-      <h1 className="mt-5 text-[28px] font-semibold leading-9 tracking-[-0.02em] text-foreground">{copy[state][0]}</h1>
-      <p role="status" className="mt-1.5 text-[15px] leading-[22px] text-muted-foreground">{copy[state][1]}</p>
-      {state !== "working" && (
-        <div className="mt-6">
-          <LinkButton href="/pages" size="lg">{state === "ok" ? "Open Paddock" : "Log in"}</LinkButton>
-        </div>
-      )}
-    </div>
+    <AuthLayout>
+      <span className="flex size-12 items-center justify-center rounded-full bg-primary-soft text-primary">
+        <MailCheck size={24} aria-hidden="true" />
+      </span>
+      <h1 className="mt-5 text-[28px] font-semibold leading-9 tracking-[-0.02em] text-foreground">Check your email</h1>
+      <p className="mt-1.5 text-[15px] leading-[22px] text-muted-foreground">
+        We sent a code to <span className="font-medium text-foreground">{email || "your email"}</span>. Enter it to confirm
+        your address.
+      </p>
+      <form onSubmit={submit} className="mt-7 flex flex-col gap-4" noValidate>
+        <Field
+          id="code"
+          label="Code"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={8}
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\s/g, ""))}
+          hint="No email after a minute? Check spam, then ask for a new code."
+        />
+        {error && (
+          <p role="alert" className="rounded-md bg-muted px-3 py-2 text-[13px] text-destructive">
+            {error}
+          </p>
+        )}
+        {notice && <p role="status" className="text-[13px] text-primary">{notice}</p>}
+        <Button type="submit" size="lg" className="w-full" disabled={busy}>
+          {busy ? "Checking" : "Confirm email"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={resend} disabled={wait > 0 || !email}>
+          {wait > 0 ? `Send a new code in ${wait}s` : "Send a new code"}
+        </Button>
+      </form>
+      <p className="mt-6 text-[13px] text-muted-foreground">
+        <Link className="font-medium text-primary hover:underline" href={`/login${carryQuery(next, email)}`}>
+          Back to log in
+        </Link>
+      </p>
+    </AuthLayout>
   );
 }
 
 export default function Page() {
   return (
-    <AuthLayout>
-      <Suspense>
-        <Verify />
-      </Suspense>
-    </AuthLayout>
+    <Suspense>
+      <Verify />
+    </Suspense>
   );
 }
