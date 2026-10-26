@@ -6,15 +6,12 @@ from typing import Annotated
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import neon
 from app.core.errors import AppError
 from app.core.policy import ALL_SCOPES
-from app.core.security import csrf_for_session, same_value
-from app.db.models import ApiToken, User, UserSession
+from app.db.models import ApiToken, User
 from app.db.session import get_session
 from app.services import accounts, tokens
-
-SESSION_COOKIE = "paddock_session"
-SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 DbDep = Annotated[AsyncSession, Depends(get_session)]
 
@@ -23,50 +20,70 @@ DbDep = Annotated[AsyncSession, Depends(get_session)]
 class Actor:
     user: User
     scopes: frozenset[str]
-    token: ApiToken | None = None
-    session: UserSession | None = None
+    token: ApiToken | None = None  # set when an agent token was used
+
+    @property
+    def is_person(self) -> bool:
+        """True for someone signed in through Neon Auth, false for an agent token."""
+        return self.token is None
 
 
 def client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
-async def get_actor(request: Request, db: DbDep) -> Actor:
-    """Work out who is calling from a Bearer token or a browser session cookie."""
+def _bearer(request: Request) -> str:
     auth = request.headers.get("authorization", "")
-    if auth:
-        if not auth.lower().startswith("bearer "):
-            raise AppError(401, "unauthenticated", "Use a Bearer token")
-        found = await tokens.find(db, auth[7:].strip())
+    if not auth:
+        raise AppError(401, "unauthenticated", "Sign in required")
+    if not auth.lower().startswith("bearer "):
+        raise AppError(401, "unauthenticated", "Use a Bearer token")
+    return auth[7:].strip()
+
+
+async def get_identity(request: Request) -> neon.Identity:
+    """Who Neon says is calling. Works before the Paddock account exists."""
+    raw = _bearer(request)
+    if not neon.looks_like_jwt(raw):
+        raise AppError(401, "unauthenticated", "Sign in required")
+    return await neon.verify(raw)
+
+
+IdentityDep = Annotated[neon.Identity, Depends(get_identity)]
+
+
+async def get_actor(request: Request, db: DbDep) -> Actor:
+    """Work out who is calling from an agent token or a Neon Auth sign-in token."""
+    raw = _bearer(request)
+    if not neon.looks_like_jwt(raw):
+        found = await tokens.find(db, raw)
         if found is None:
             raise AppError(401, "unauthenticated", "Invalid or expired token")
         user, token = found
         return Actor(user=user, scopes=frozenset(token.scopes), token=token)
 
-    raw = request.cookies.get(SESSION_COOKIE)
-    found = await accounts.find_session(db, raw) if raw else None
-    if found is None:
-        raise AppError(401, "unauthenticated", "Sign in required")
-    user, session = found
-
-    if request.method not in SAFE_METHODS:
-        sent = request.headers.get("x-csrf-token", "")
-        if not same_value(sent, csrf_for_session(session.id)):
-            raise AppError(403, "forbidden", "Missing or invalid CSRF token")
-    return Actor(user=user, scopes=ALL_SCOPES, session=session)
+    identity = await neon.verify(raw)
+    user = await accounts.find_by_neon(db, identity)
+    if user is None:
+        raise AppError(
+            403, "onboarding_required", "Choose a handle to finish creating your account"
+        )
+    if user.disabled_at is not None:
+        raise AppError(401, "unauthenticated", "This account is disabled")
+    return Actor(user=user, scopes=ALL_SCOPES)
 
 
 ActorDep = Annotated[Actor, Depends(get_actor)]
 
 
-async def get_session_actor(actor: ActorDep) -> Actor:
-    """For account management: only a browser session, never an agent token."""
-    if actor.session is None:
-        raise AppError(403, "forbidden", "This needs a browser session, not an API token")
+async def get_person(actor: ActorDep) -> Actor:
+    """For account management: only a signed-in person, never an agent token."""
+    if not actor.is_person:
+        raise AppError(403, "forbidden", "This needs a signed-in person, not an API token")
     return actor
 
 
-SessionActorDep = Annotated[Actor, Depends(get_session_actor)]
+PersonDep = Annotated[Actor, Depends(get_person)]
 
 
 def require_scope(scope: str):
@@ -86,7 +103,7 @@ async def get_verified_actor(actor: ActorDep) -> Actor:
         raise AppError(
             403,
             "email_not_verified",
-            "Verify your email address first. Check your inbox or resend the email.",
+            "Verify your email address first. Check your inbox for the code.",
         )
     return actor
 
@@ -94,8 +111,8 @@ async def get_verified_actor(actor: ActorDep) -> Actor:
 VerifiedActorDep = Annotated[Actor, Depends(get_verified_actor)]
 
 
-async def get_verified_session_actor(actor: SessionActorDep) -> Actor:
+async def get_verified_person(actor: PersonDep) -> Actor:
     return await get_verified_actor(actor)
 
 
-VerifiedSessionActorDep = Annotated[Actor, Depends(get_verified_session_actor)]
+VerifiedPersonDep = Annotated[Actor, Depends(get_verified_person)]

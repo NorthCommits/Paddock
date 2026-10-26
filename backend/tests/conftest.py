@@ -27,6 +27,11 @@ STORAGE_DIR = tempfile.mkdtemp(prefix="paddock_test_files_")
 os.environ["STORAGE_LOCAL_PATH"] = STORAGE_DIR
 atexit.register(shutil.rmtree, STORAGE_DIR, ignore_errors=True)
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
+
+# Stands in for Neon's signing key. Tokens made with it pass the real checking code.
+TEST_PRIVATE_KEY = Ed25519PrivateKey.generate()
+
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402
@@ -95,6 +100,14 @@ async def fake_client(fake_session):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def neon_keys(monkeypatch):
+    """Use the test key instead of fetching Neon's public keys over the network."""
+    from app.core import neon
+
+    monkeypatch.setattr(neon, "_signing_key", lambda token: TEST_PRIVATE_KEY.public_key())
 
 
 @pytest.fixture(autouse=True)

@@ -115,10 +115,9 @@ async def test_anonymous_callers_are_refused(client):
     assert (await client.post("/v1/pages", json=page_body())).status_code in (401, 403)
 
 
-async def test_browser_writes_need_csrf(client):
-    await signup(client)
+async def test_writes_need_to_be_signed_in(client):
     response = await client.post("/v1/pages", json=page_body())
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 async def test_listing_pages_with_a_cursor(client):

@@ -12,7 +12,7 @@ def settings(**kw):
         "smtp_host": "smtp.example.com",
         "email_from": "Paddock <hello@paddock.example>",
     }
-    return Settings(**{**base, **kw})
+    return Settings(_env_file=None, **{**base, **kw})
 
 
 class FakeSmtp:

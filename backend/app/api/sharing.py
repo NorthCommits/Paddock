@@ -2,7 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Request
 
-from app.api.deps import ActorDep, DbDep, SessionActorDep, VerifiedActorDep, client_ip
+from app.api.deps import ActorDep, DbDep, PersonDep, VerifiedActorDep, client_ip
 from app.schemas.pages import PageOut, ViewUrlOut
 from app.schemas.sharing import (
     InviteCreatedOut,
@@ -98,7 +98,7 @@ async def preview_invite(token: str, db: DbDep):
 
 
 @public.post("/invites/{token}/accept", response_model=PageOut)
-async def accept_invite(token: str, request: Request, db: DbDep, actor: SessionActorDep):
+async def accept_invite(token: str, request: Request, db: DbDep, actor: PersonDep):
     page, _ = await sharing.accept_invite(db, actor.user, token, client_ip(request))
     return await pages.page_out(db, page, actor.user)
 

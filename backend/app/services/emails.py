@@ -20,36 +20,6 @@ def _page(title: str, intro: str, button: str, link: str, outro: str) -> str:
 </td></tr></table></td></tr></table></body></html>"""
 
 
-def verify_email(to: str, name: str, link: str, hours: int) -> Message:
-    intro = f"Hi {name}, confirm your email address to start publishing pages on Paddock."
-    outro = (
-        f"This link works for {hours} hours. "
-        "If you did not create a Paddock account, you can ignore this email."
-    )
-    text = f"{intro}\n\nConfirm your email: {link}\n\n{outro}\n"
-    return Message(
-        to=to,
-        subject="Confirm your email for Paddock",
-        text=text,
-        html=_page("Confirm your email", intro, "Confirm email", link, outro),
-    )
-
-
-def reset_password(to: str, name: str, link: str, minutes: int) -> Message:
-    intro = f"Hi {name}, we received a request to reset your Paddock password."
-    outro = (
-        f"This link works for {minutes} minutes and can be used once. "
-        "If you did not ask for this, you can ignore this email and your password stays the same."
-    )
-    text = f"{intro}\n\nChoose a new password: {link}\n\n{outro}\n"
-    return Message(
-        to=to,
-        subject="Reset your Paddock password",
-        text=text,
-        html=_page("Reset your password", intro, "Choose a new password", link, outro),
-    )
-
-
 def page_invite(to: str, inviter: str, title: str, role: str, link: str, days: int) -> Message:
     what = {
         "viewer": "view",

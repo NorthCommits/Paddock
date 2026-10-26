@@ -11,7 +11,7 @@ from app.db.session import get_engine
 from app.main import app
 from app.services import sharing
 
-from .helpers import auth, mails_to, make_token, new_page, page_body, signup
+from .helpers import auth, mails_to, make_token, mint_token, new_page, page_body, signup
 
 BO = {"email": "bo@example.com", "handle": "bobby"}
 
@@ -262,12 +262,9 @@ async def test_invites_work_once_and_can_expire_or_be_revoked(client):
     revoked = await client.delete(f"/v1/pages/{page_id}/invites/{inv3['id']}", headers=auth(data))
     assert revoked.status_code == 204
     async with other() as cy:
-        login = await cy.post(
-            "/v1/auth/login", json={"email": "cy@example.com", "password": "correct horse battery"}
-        )
         gone = await cy.post(
             f"/v1/invites/{raw_token(inv3['accept_url'])}/accept",
-            headers=auth(login.json()),
+            headers=auth({"token": mint_token("cy@example.com")}),
         )
         assert gone.status_code == 404
     assert (

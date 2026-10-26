@@ -38,14 +38,13 @@ async def test_token_is_shown_once_and_stored_only_as_a_hash(client):
     assert len(stored) == 64
 
 
-async def test_token_authenticates_without_csrf(client):
+async def test_token_authenticates_on_its_own(client):
     data = await signup(client)
     token = await make_token(client, data)
     client.cookies.clear()
     response = await client.get("/v1/me", headers=bearer(token))
     assert response.status_code == 200
     assert response.json()["scopes"] == ["pages:read"]
-    assert response.json()["csrf_token"] is None
 
 
 async def test_token_records_when_it_was_last_used(client):

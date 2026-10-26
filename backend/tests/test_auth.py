@@ -1,171 +1,173 @@
-from datetime import UTC, datetime, timedelta
+"""Sign in with Neon Auth: token checks, picking a handle, and the profile."""
 
-from sqlalchemy import select, update
+import time
 
-from app.db.models import AuditLog, User, UserSession
-from app.db.session import get_sessionmaker
-from tests.helpers import PASSWORD, csrf, signup
+import jwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from app.core import neon
+from app.core.errors import AppError
 
-async def test_signup_creates_a_session_and_returns_the_user(client):
-    data = await signup(client)
-    assert data["user"]["email"] == "ana@example.com"
-    assert data["user"]["handle"] == "ana"
-    assert data["user"]["display_name"] == "ana"
-    assert data["csrf_token"]
-    assert "paddock_session" in client.cookies
-
-    me = await client.get("/v1/me")
-    assert me.status_code == 200
-    assert me.json()["user"]["handle"] == "ana"
-    assert me.json()["csrf_token"] == data["csrf_token"]
+from .helpers import mint_token, signup
 
 
-async def test_session_cookie_is_http_only_and_lax(client):
-    response = await client.post(
-        "/v1/auth/signup",
-        json={"email": "a@example.com", "password": PASSWORD, "handle": "abe"},
+def bearer(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+# ----- the token check -----
+
+
+async def test_a_good_token_is_accepted():
+    who = await neon.verify(mint_token("ana@example.com", name="Ana Lopez"))
+    assert who.email == "ana@example.com"
+    assert who.name == "Ana Lopez"
+    assert who.email_verified is True
+
+
+async def test_an_expired_token_is_rejected():
+    token = mint_token("ana@example.com", minutes=-5)
+    with pytest.raises(AppError) as err:
+        await neon.verify(token)
+    assert err.value.status == 401
+
+
+async def test_a_token_signed_with_another_key_is_rejected():
+    token = mint_token("ana@example.com", key=Ed25519PrivateKey.generate())
+    # The test fixture hands back the real test public key, so a stranger's signature fails.
+    with pytest.raises(AppError):
+        await neon.verify(token)
+
+
+async def test_a_token_without_an_email_is_rejected():
+    from tests.conftest import TEST_PRIVATE_KEY
+
+    now = int(time.time())
+    token = jwt.encode(
+        {"sub": "x", "exp": now + 60}, TEST_PRIVATE_KEY, algorithm="EdDSA", headers={"kid": "t"}
     )
-    cookie = response.headers["set-cookie"].lower()
-    assert "httponly" in cookie
-    assert "samesite=lax" in cookie
+    with pytest.raises(AppError):
+        await neon.verify(token)
 
 
-async def test_password_is_stored_as_an_argon2_hash(client):
-    await signup(client)
-    async with get_sessionmaker()() as db:
-        user = await db.scalar(select(User))
-    assert PASSWORD not in user.password_hash
-    assert user.password_hash.startswith("$argon2id$")
+async def test_the_none_algorithm_is_rejected():
+    token = jwt.encode({"sub": "x", "email": "a@b.co", "exp": int(time.time()) + 60}, None, "none")
+    with pytest.raises(AppError):
+        await neon.verify(token)
 
 
-async def test_session_cookie_value_is_stored_only_as_a_hash(client):
-    await signup(client)
-    raw = client.cookies["paddock_session"]
-    async with get_sessionmaker()() as db:
-        stored = await db.scalar(select(UserSession.token_hash))
-    assert stored != raw
-    assert len(stored) == 64
+async def test_email_verified_can_come_from_the_server_setting(monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "neon_auth_email_verified", True)
+    who = await neon.verify(mint_token("ana@example.com", verified=False))
+    assert who.email_verified is True
 
 
-async def test_duplicate_email_is_rejected(client):
-    await signup(client)
-    response = await client.post(
-        "/v1/auth/signup",
-        json={"email": "ANA@example.com", "password": PASSWORD, "handle": "other"},
-    )
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "conflict"
+# ----- onboarding -----
 
 
-async def test_duplicate_handle_is_rejected(client):
-    await signup(client)
-    response = await client.post(
-        "/v1/auth/signup",
-        json={"email": "b@example.com", "password": PASSWORD, "handle": "ana"},
-    )
-    assert response.status_code == 409
-
-
-async def test_bad_signup_input_is_rejected(client):
-    base = {"email": "a@example.com", "password": PASSWORD, "handle": "abe"}
-    for change in (
-        {"password": "short"},
-        {"handle": "admin"},
-        {"handle": "a"},
-        {"handle": "-bad-"},
-        {"handle": "has space"},
-        {"email": "not-an-email"},
-    ):
-        response = await client.post("/v1/auth/signup", json={**base, **change})
-        assert response.status_code == 422, change
-        assert response.json()["error"]["code"] == "validation_failed"
-
-
-async def test_login_works_with_any_email_case(client):
-    await signup(client)
-    client.cookies.clear()
-    response = await client.post(
-        "/v1/auth/login", json={"email": "Ana@Example.com", "password": PASSWORD}
-    )
-    assert response.status_code == 200
-    assert (await client.get("/v1/me")).status_code == 200
-
-
-async def test_wrong_password_and_unknown_email_look_the_same(client):
-    await signup(client)
-    client.cookies.clear()
-    wrong = await client.post(
-        "/v1/auth/login", json={"email": "ana@example.com", "password": "not the password"}
-    )
-    unknown = await client.post(
-        "/v1/auth/login", json={"email": "nobody@example.com", "password": PASSWORD}
-    )
-    assert wrong.status_code == unknown.status_code == 401
-    assert wrong.json()["error"]["message"] == unknown.json()["error"]["message"]
-
-
-async def test_failed_login_is_recorded_in_the_audit_log(client):
-    await signup(client)
-    await client.post(
-        "/v1/auth/login", json={"email": "ana@example.com", "password": "not the password"}
-    )
-    async with get_sessionmaker()() as db:
-        actions = list(await db.scalars(select(AuditLog.action)))
-    assert "user.login_failed" in actions
-    assert "user.signup" in actions
-
-
-async def test_disabled_user_cannot_log_in_or_use_an_existing_session(client):
-    await signup(client)
-    async with get_sessionmaker()() as db:
-        await db.execute(update(User).values(disabled_at=datetime.now(UTC)))
-        await db.commit()
+async def test_requests_without_a_token_are_401(client):
     assert (await client.get("/v1/me")).status_code == 401
-    client.cookies.clear()
-    response = await client.post(
-        "/v1/auth/login", json={"email": "ana@example.com", "password": PASSWORD}
-    )
-    assert response.status_code == 401
+    assert (await client.get("/v1/onboarding")).status_code == 401
 
 
-async def test_expired_session_is_rejected(client):
-    await signup(client)
-    async with get_sessionmaker()() as db:
-        await db.execute(
-            update(UserSession).values(expires_at=datetime.now(UTC) - timedelta(minutes=1))
-        )
-        await db.commit()
-    assert (await client.get("/v1/me")).status_code == 401
+async def test_signed_in_but_no_handle_yet_must_onboard(client):
+    token = mint_token("ana@example.com", name="Ana Lopez")
+    me = await client.get("/v1/me", headers=bearer(token))
+    assert me.status_code == 403
+    assert me.json()["error"]["code"] == "onboarding_required"
+
+    state = (await client.get("/v1/onboarding", headers=bearer(token))).json()
+    assert state["needs_onboarding"] is True
+    assert state["email"] == "ana@example.com"
+    assert len(state["suggestions"]) == 5
 
 
-async def test_me_requires_sign_in(client):
-    response = await client.get("/v1/me")
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "unauthenticated"
+async def test_suggestions_are_valid_and_free(client):
+    await signup(client, email="first@example.com", handle="ana-lopez")
+    token = mint_token("ana@example.com", name="Ana Lopez")
+    state = (await client.get("/v1/onboarding", headers=bearer(token))).json()
+    assert "ana-lopez" not in state["suggestions"]
+    for handle in state["suggestions"]:
+        check = (
+            await client.get("/v1/handles/check", params={"handle": handle}, headers=bearer(token))
+        ).json()
+        assert check["available"] is True, handle
 
 
-async def test_state_changing_request_needs_the_csrf_token(client):
-    await signup(client)
-    assert (await client.post("/v1/auth/logout")).status_code == 403
+async def test_choosing_a_handle_creates_the_account(client):
+    token = mint_token("ana@example.com", name="Ana Lopez")
+    done = await client.post("/v1/onboarding", json={"handle": "Ana-L"}, headers=bearer(token))
+    assert done.status_code == 201
+    assert done.json()["handle"] == "ana-l"
+    assert done.json()["display_name"] == "Ana Lopez"
+    assert done.json()["email_verified_at"] is not None
+
+    me = (await client.get("/v1/me", headers=bearer(token))).json()
+    assert me["user"]["handle"] == "ana-l"
+    state = (await client.get("/v1/onboarding", headers=bearer(token))).json()
+    assert state["needs_onboarding"] is False
+    assert state["suggestions"] == []
+
+
+async def test_handle_rules_and_conflicts(client):
+    await signup(client, email="ana@example.com", handle="ana")
+    token = mint_token("bo@example.com")
+    for bad in ("a", "-ana-", "has space", "admin"):
+        r = await client.post("/v1/onboarding", json={"handle": bad}, headers=bearer(token))
+        assert r.status_code == 422, bad
+    taken = await client.post("/v1/onboarding", json={"handle": "ana"}, headers=bearer(token))
+    assert taken.status_code == 409
+    check = (
+        await client.get("/v1/handles/check", params={"handle": "ana"}, headers=bearer(token))
+    ).json()
+    assert check["available"] is False
+
+
+async def test_onboarding_twice_is_refused(client):
+    token = mint_token("ana@example.com")
     assert (
-        await client.post("/v1/auth/logout", headers={"X-CSRF-Token": "wrong"})
-    ).status_code == 403
-    assert (await client.get("/v1/me")).status_code == 200  # still signed in
+        await client.post("/v1/onboarding", json={"handle": "ana"}, headers=bearer(token))
+    ).status_code == 201
+    again = await client.post("/v1/onboarding", json={"handle": "ana2"}, headers=bearer(token))
+    assert again.status_code == 409
 
 
-async def test_csrf_token_from_another_session_does_not_work(client):
-    first = await signup(client)
-    client.cookies.clear()
-    await signup(client, email="b@example.com", handle="ben")
-    response = await client.post("/v1/auth/logout", headers=csrf(first))
-    assert response.status_code == 403
+async def test_unverified_email_blocks_publishing_until_verified(client):
+    data = await signup(client, verify=False)
+    page = await client.post(
+        "/v1/pages",
+        json={"title": "T", "files": [{"path": "index.html", "content": "x"}]},
+        headers=bearer(data["token"]),
+    )
+    assert page.status_code == 403
+    assert page.json()["error"]["code"] == "email_not_verified"
+
+    # Once Neon reports the address as verified, the next request catches up.
+    verified = mint_token("ana@example.com", verified=True)
+    page = await client.post(
+        "/v1/pages",
+        json={"title": "T", "files": [{"path": "index.html", "content": "x"}]},
+        headers=bearer(verified),
+    )
+    assert page.status_code == 201
 
 
-async def test_logout_ends_the_session(client):
+async def test_profile_name_can_change(client):
     data = await signup(client)
-    response = await client.post("/v1/auth/logout", headers=csrf(data))
-    assert response.status_code == 204
-    assert (await client.get("/v1/me")).status_code == 401
-    async with get_sessionmaker()() as db:
-        assert await db.scalar(select(UserSession.id)) is None
+    done = await client.patch(
+        "/v1/me", json={"display_name": " Ana L. "}, headers=bearer(data["token"])
+    )
+    assert done.status_code == 200
+    assert done.json()["display_name"] == "Ana L."
+
+
+async def test_api_tokens_cannot_edit_the_profile(client):
+    from .helpers import make_token
+
+    data = await signup(client)
+    token = await make_token(client, data)
+    r = await client.patch("/v1/me", json={"display_name": "X"}, headers=bearer(token["token"]))
+    assert r.status_code == 403

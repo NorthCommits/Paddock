@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     database_url_unpooled: str | None = None
 
     secret_key: str = DEV_SECRET
-    session_days: int = 30
     app_origin: str = "http://localhost:3000"
     content_origin: str = "http://localhost:8001"
 
@@ -35,7 +34,14 @@ class Settings(BaseSettings):
     # How long a signed link to published content stays valid.
     content_token_minutes: int = 15
 
-    # Email. "console" only logs messages (development). "smtp" sends them for real.
+    # Neon Auth. Sign up, sign in and password reset live there. The address looks like
+    # https://ep-xxx.neonauth.<region>.aws.neon.tech/<database>/auth
+    neon_auth_url: str | None = None
+    # Set to true only when Neon is set to require a verified email before sign in.
+    neon_auth_email_verified: bool = False
+
+    # Email, used for page invitations. "console" only logs messages (development).
+    # "smtp" sends them for real.
     email_backend: str = "console"
     email_from: str = "Paddock <noreply@localhost>"
     smtp_host: str | None = None
@@ -43,13 +49,6 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_security: str = "starttls"  # starttls, ssl or none
-    verify_email_hours: int = 24
-    reset_password_minutes: int = 60
-
-    @property
-    def cookie_secure(self) -> bool:
-        """Browsers only send secure cookies over HTTPS, so switch it off for local work."""
-        return self.environment not in ("development", "test")
 
     @property
     def migration_url(self) -> str:
@@ -65,6 +64,8 @@ class Settings(BaseSettings):
             raise ValueError("SMTP_SECURITY must be starttls, ssl or none")
         if self.email_backend == "smtp" and not self.smtp_host:
             raise ValueError("SMTP_HOST must be set when EMAIL_BACKEND is smtp")
+        if self.environment == "production" and not self.neon_auth_url:
+            raise ValueError("NEON_AUTH_URL must be set in production")
         if self.environment == "production" and self.email_backend != "smtp":
             raise ValueError("EMAIL_BACKEND must be smtp in production")
         return self

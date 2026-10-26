@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.policy import ALL_SCOPES
 
@@ -13,33 +13,27 @@ RESERVED_HANDLES = {
 }  # fmt: skip
 
 
-class SignupIn(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=10, max_length=128)
+class OnboardIn(BaseModel):
     handle: str
     display_name: str | None = Field(default=None, max_length=100)
 
-    @field_validator("email")
-    @classmethod
-    def _lower_email(cls, value: str) -> str:
-        return value.lower()
-
     @field_validator("handle")
     @classmethod
-    def _check_handle(cls, value: str) -> str:
-        value = value.lower()
-        if not HANDLE_PATTERN.match(value):
-            raise ValueError(
-                "use 3 to 30 letters, numbers or dashes, not starting or ending with a dash"
-            )
-        if value in RESERVED_HANDLES:
-            raise ValueError("this handle is reserved")
-        return value
+    def _lower(cls, value: str) -> str:
+        return value.strip().lower()
 
 
-class LoginIn(BaseModel):
-    email: EmailStr
-    password: str = Field(max_length=128)
+class OnboardingOut(BaseModel):
+    needs_onboarding: bool
+    email: str
+    name: str | None
+    suggestions: list[str]
+
+
+class HandleCheckOut(BaseModel):
+    handle: str
+    available: bool
+    reason: str | None
 
 
 class UserOut(BaseModel):
@@ -53,15 +47,9 @@ class UserOut(BaseModel):
     email_verified_at: datetime | None
 
 
-class SessionOut(BaseModel):
-    user: UserOut
-    csrf_token: str
-
-
 class MeOut(BaseModel):
     user: UserOut
     scopes: list[str]
-    csrf_token: str | None  # only for browser sessions
 
 
 class TokenCreateIn(BaseModel):
@@ -105,36 +93,3 @@ class ProfileUpdate(BaseModel):
         if not value:
             raise ValueError("name cannot be empty")
         return value
-
-
-class PasswordChangeIn(BaseModel):
-    current_password: str = Field(max_length=128)
-    new_password: str = Field(min_length=10, max_length=128)
-
-
-class BrowserSessionOut(BaseModel):
-    id: uuid.UUID
-    created_at: datetime
-    last_seen_at: datetime
-    expires_at: datetime
-    user_agent: str | None
-    ip: str | None
-    current: bool
-
-
-class VerifyEmailIn(BaseModel):
-    token: str = Field(min_length=10, max_length=200)
-
-
-class ForgotPasswordIn(BaseModel):
-    email: EmailStr
-
-    @field_validator("email")
-    @classmethod
-    def _lower_email(cls, value: str) -> str:
-        return value.lower()
-
-
-class ResetPasswordIn(BaseModel):
-    token: str = Field(min_length=10, max_length=200)
-    new_password: str = Field(min_length=10, max_length=128)
