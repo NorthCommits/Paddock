@@ -1,17 +1,18 @@
 "use client";
 
-import { ArrowLeft, Bot, ExternalLink, History, Pencil, RotateCcw, Trash2, Upload, User, X } from "lucide-react";
+import { ArrowLeft, Bot, ExternalLink, History, LogOut, Pencil, RotateCcw, Share2, Trash2, Upload, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
+import { ShareSheet } from "@/components/share-sheet";
 import { UploadSheet } from "@/components/upload-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, ROLE_LABEL, api, fetchMe } from "@/lib/api";
 import type { Page, Publish, Version, VersionList, ViewUrl } from "@/lib/api";
 import { ago, bytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,9 @@ export default function PageViewer() {
   const [picked, setPicked] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const me = useSWR("me", fetchMe);
   const [deleting, setDeleting] = useState(false);
   const [rollback, setRollback] = useState<Version | null>(null);
   const [notice, setNotice] = useState("");
@@ -65,6 +69,16 @@ export default function PageViewer() {
     }
   }
 
+  async function doLeave() {
+    if (!me.data) return;
+    try {
+      await api(`/v1/pages/${id}/members/${me.data.user.id}`, { method: "DELETE" });
+      router.push("/pages");
+    } catch (err) {
+      setFailed((err as Error).message);
+    }
+  }
+
   async function doDelete() {
     try {
       await api(`/v1/pages/${id}`, { method: "DELETE" });
@@ -91,6 +105,8 @@ export default function PageViewer() {
 
   const p = page.data;
   const old = !!p && shown !== null && shown !== current;
+  const isOwner = p?.role === "owner";
+  const canEdit = p?.role === "owner" || p?.role === "editor";
   const shownVersion = versions.data?.items.find((v) => v.number === shown);
 
   return (
@@ -99,10 +115,11 @@ export default function PageViewer() {
         <Link href="/pages" aria-label="Back to pages" className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
           <ArrowLeft size={16} />
         </Link>
-        {p ? <Title page={p} onSaved={async () => { await refresh(); setNotice("Saved."); }} /> : <Skeleton className="h-6 w-48" />}
+        {p ? <Title page={p} canRename={isOwner} onSaved={async () => { await refresh(); setNotice("Saved."); }} /> : <Skeleton className="h-6 w-48" />}
         {p && <Badge variant={old ? "neutral" : "success"}>{old ? `Viewing v${shown}` : `v${current}`}</Badge>}
+        {p && !isOwner && <Badge>{ROLE_LABEL[p.role]}</Badge>}
         <span className="flex-1" />
-        {old && (
+        {old && canEdit && (
           <Button size="sm" variant="secondary" onClick={() => shownVersion && setRollback(shownVersion)}>
             <RotateCcw aria-hidden="true" /> Restore this version
           </Button>
@@ -110,9 +127,16 @@ export default function PageViewer() {
         {old && (
           <Button size="sm" variant="ghost" onClick={() => setPicked(null)}>Back to latest</Button>
         )}
-        <Button size="sm" variant="secondary" onClick={() => setUploading(true)}>
-          <Upload aria-hidden="true" /> New version
-        </Button>
+        {canEdit && (
+          <Button size="sm" variant="secondary" onClick={() => setUploading(true)}>
+            <Upload aria-hidden="true" /> New version
+          </Button>
+        )}
+        {isOwner && (
+          <Button size="sm" variant="secondary" onClick={() => setSharing(true)}>
+            <Share2 aria-hidden="true" /> Share
+          </Button>
+        )}
         <Button size="sm" variant={showHistory ? "default" : "secondary"} onClick={() => setShowHistory((v) => !v)} aria-pressed={showHistory}>
           <History aria-hidden="true" /> History
         </Button>
@@ -127,13 +151,20 @@ export default function PageViewer() {
             <ExternalLink size={16} />
           </a>
         )}
-        <button
-          aria-label="Delete page"
-          onClick={() => setDeleting(true)}
-          className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
-        >
-          <Trash2 size={16} />
-        </button>
+        {isOwner && (
+          <button
+            aria-label="Delete page"
+            onClick={() => setDeleting(true)}
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-destructive"
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+        {p && !isOwner && (
+          <Button size="sm" variant="ghost" onClick={() => setLeaving(true)}>
+            <LogOut aria-hidden="true" /> Leave
+          </Button>
+        )}
       </div>
 
       <div className="relative flex min-h-0 flex-1">
@@ -256,6 +287,28 @@ export default function PageViewer() {
         </div>
       </Sheet>
 
+      {p && isOwner && (
+        <ShareSheet open={sharing} onClose={() => setSharing(false)} page={p} onPageChanged={async () => { await page.mutate(); }} />
+      )}
+
+      <Sheet
+        open={leaving}
+        onOpenChange={(o) => {
+          if (!o) {
+            setLeaving(false);
+            setFailed("");
+          }
+        }}
+        title={p ? `Leave "${p.title}"?` : "Leave page"}
+        description="You will lose access. The owner can invite you again."
+      >
+        {failed && <p role="alert" className="mb-3 text-[13px] text-destructive">{failed}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={() => setLeaving(false)}>Cancel</Button>
+          <Button variant="destructive" onClick={doLeave}>Leave page</Button>
+        </div>
+      </Sheet>
+
       <Sheet
         open={deleting}
         onOpenChange={(o) => {
@@ -277,7 +330,7 @@ export default function PageViewer() {
   );
 }
 
-function Title({ page, onSaved }: { page: Page; onSaved: () => void | Promise<void> }) {
+function Title({ page, canRename, onSaved }: { page: Page; canRename: boolean; onSaved: () => void | Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(page.title);
   const [slug, setSlug] = useState(page.slug);
@@ -299,6 +352,15 @@ function Title({ page, onSaved }: { page: Page; onSaved: () => void | Promise<vo
     } catch (err) {
       setError((err as Error).message);
     }
+  }
+
+  if (!canRename) {
+    return (
+      <span className="flex min-w-0 items-center gap-2 px-2 py-1">
+        <span className="truncate text-[15px] font-semibold text-foreground">{page.title}</span>
+        <span className="hidden text-[12px] text-subtle sm:inline">by @{page.owner_handle}</span>
+      </span>
+    );
   }
 
   if (!editing) {

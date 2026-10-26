@@ -2,7 +2,7 @@
 
 import { motion } from "motion/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { mutate } from "swr";
 import { ApiError, api, setCsrf } from "@/lib/api";
@@ -14,13 +14,22 @@ import { Field } from "./ui/input";
 
 const ease = [0.2, 0, 0, 1] as const;
 
+// Only allow a path inside this site, so a crafted link cannot send people elsewhere.
+function safeNext(value: string | null): string | null {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : null;
+}
+
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
+  const params = useSearchParams();
+  const next = safeNext(params.get("next"));
+  const prefill = params.get("email") ?? "";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [handle, setHandle] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(prefill);
   const signup = mode === "signup";
+  const carry = next ? `?next=${encodeURIComponent(next)}${prefill ? `&email=${encodeURIComponent(prefill)}` : ""}` : "";
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -46,7 +55,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       });
       setCsrf(out.csrf_token);
       await mutate("me", undefined, { revalidate: false });
-      router.push("/pages");
+      router.push(next ?? "/pages");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
       setBusy(false);
@@ -82,7 +91,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
               />
             </>
           )}
-          <Field id="email" name="email" type="email" label="Email" autoComplete="email" required onChange={(e) => setEmail(e.target.value)} />
+          <Field id="email" name="email" type="email" label="Email" autoComplete="email" required defaultValue={prefill} onChange={(e) => setEmail(e.target.value)} />
           <div>
             <PasswordField
               id="password"
@@ -113,7 +122,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </form>
         <p className="mt-6 text-[13px] text-muted-foreground">
           {signup ? "Already have an account? " : "New to Paddock? "}
-          <Link className="font-medium text-primary hover:underline" href={signup ? "/login" : "/signup"}>
+          <Link className="font-medium text-primary hover:underline" href={`${signup ? "/login" : "/signup"}${carry}`}>
             {signup ? "Log in" : "Create an account"}
           </Link>
         </p>

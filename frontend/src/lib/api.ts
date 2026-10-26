@@ -20,6 +20,61 @@ export type TokenRow = {
   revoked_at: string | null;
 };
 
+export type Role = "owner" | "editor" | "commenter" | "viewer";
+export type MemberRole = "viewer" | "commenter" | "editor";
+export type Visibility = "private" | "members" | "link";
+
+export type Member = {
+  user_id: string;
+  handle: string;
+  display_name: string;
+  email: string;
+  role: MemberRole;
+  created_at: string;
+};
+
+export type Invite = {
+  id: string;
+  email: string;
+  role: MemberRole;
+  created_at: string;
+  expires_at: string;
+  expired: boolean;
+};
+export type InviteCreated = Invite & { accept_url: string; emailed: boolean };
+export type InvitePreview = {
+  page_title: string;
+  owner_handle: string;
+  invited_by: string | null;
+  email: string;
+  role: MemberRole;
+  expires_at: string;
+};
+
+export type ShareLinkRow = {
+  id: string;
+  role: "viewer" | "commenter";
+  created_at: string;
+  expires_at: string | null;
+  expired: boolean;
+};
+export type ShareLinkCreated = ShareLinkRow & { url: string };
+export type Shared = {
+  page_id: string;
+  title: string;
+  owner_handle: string;
+  role: "viewer" | "commenter";
+  version_number: number | null;
+  updated_at: string;
+};
+
+export const ROLE_LABEL: Record<Role, string> = {
+  owner: "Owner",
+  editor: "Can edit",
+  commenter: "Can comment",
+  viewer: "Can view",
+};
+
 export type Version = {
   id: string;
   number: number;
@@ -41,6 +96,7 @@ export type Page = {
   title: string;
   visibility: string;
   owner_handle: string;
+  role: Role;
   current_version: Version | null;
   created_at: string;
   updated_at: string;
