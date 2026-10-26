@@ -5,8 +5,11 @@ private key that only Neon holds). We check the signature against Neon's public 
 """
 
 import asyncio
+import logging
+import ssl
 from dataclasses import dataclass
 
+import certifi
 import jwt
 from jwt import PyJWKClient
 from jwt.exceptions import PyJWKClientConnectionError
@@ -14,6 +17,7 @@ from jwt.exceptions import PyJWKClientConnectionError
 from app.core.config import get_settings
 from app.core.errors import AppError
 
+log = logging.getLogger("paddock.neon")
 _client: PyJWKClient | None = None
 
 
@@ -34,7 +38,13 @@ def _jwks_client() -> PyJWKClient:
     if not url:
         raise AppError(503, "auth_unavailable", "Sign in is not configured on this server")
     if _client is None:
-        _client = PyJWKClient(f"{url.rstrip('/')}/.well-known/jwks.json", lifespan=3600)
+        # certifi gives Python a trusted list of certificate authorities, even on a Mac
+        # where Python was installed without one.
+        _client = PyJWKClient(
+            f"{url.rstrip('/')}/.well-known/jwks.json",
+            lifespan=3600,
+            ssl_context=ssl.create_default_context(cafile=certifi.where()),
+        )
     return _client
 
 
@@ -57,6 +67,7 @@ async def verify(token: str) -> Identity:
             options={"require": ["exp", "sub"], "verify_aud": False},
         )
     except PyJWKClientConnectionError as exc:
+        log.warning("Could not fetch Neon's public keys: %s", exc)
         raise AppError(503, "auth_unavailable", "Cannot reach the sign in service") from exc
     except jwt.PyJWTError as exc:
         raise AppError(401, "unauthenticated", "Sign in again") from exc

@@ -5,12 +5,10 @@ import { useState } from "react";
 import useSWR from "swr";
 import { Section } from "@/components/section";
 import { PasswordField } from "@/components/password-field";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, api, fetchMe } from "@/lib/api";
-import type { BrowserSession } from "@/lib/api";
-import { agentName, ago } from "@/lib/format";
+import { fetchMe } from "@/lib/api";
+import { authClient } from "@/lib/auth/client";
+import { authMessage } from "@/lib/auth/session";
 
 function ChangePassword() {
   const { data: me } = useSWR("me", fetchMe);
@@ -27,11 +25,16 @@ function ChangePassword() {
     setBusy(true);
     setMsg(null);
     try {
-      await api("/v1/me/password", { method: "POST", body: { current_password: current, new_password: next } });
+      const { error } = await authClient.changePassword({
+        currentPassword: current,
+        newPassword: next,
+        revokeOtherSessions: true,
+      });
+      if (error) throw error;
       setRound((r) => r + 1);
       setMsg({ ok: true, text: "Password changed. Other devices were signed out." });
     } catch (err) {
-      setMsg({ ok: false, text: err instanceof ApiError ? err.message : "Something went wrong. Try again." });
+      setMsg({ ok: false, text: authMessage(err as { message?: string }) });
     } finally {
       setBusy(false);
     }
@@ -61,61 +64,30 @@ function ChangePassword() {
   );
 }
 
-function Sessions() {
-  const { data, error, mutate } = useSWR("sessions", () => api<BrowserSession[]>("/v1/me/sessions"));
-  const [failed, setFailed] = useState("");
+function Devices() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  async function revoke(id: string) {
-    setFailed("");
-    try {
-      await api(`/v1/me/sessions/${id}`, { method: "DELETE" });
-      await mutate();
-    } catch (err) {
-      setFailed((err as Error).message);
-    }
+  async function signOutOthers() {
+    setBusy(true);
+    setMsg(null);
+    const { error } = await authClient.revokeOtherSessions();
+    setBusy(false);
+    setMsg(error ? { ok: false, text: authMessage(error) } : { ok: true, text: "Signed out of all other devices." });
   }
-
-  async function revokeOthers() {
-    setFailed("");
-    try {
-      await api("/v1/me/sessions/revoke-others", { method: "POST" });
-      await mutate();
-    } catch (err) {
-      setFailed((err as Error).message);
-    }
-  }
-
-  if (error) return <p role="alert" className="text-[13px] text-destructive">{(error as Error).message}</p>;
-  if (!data) return <Skeleton className="h-16 w-full" />;
-
-  const others = data.filter((s) => !s.current).length;
 
   return (
-    <div>
-      <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-card">
-        {data.map((s) => (
-          <li key={s.id} className="flex items-center gap-3 px-4 py-3">
-            <Laptop size={18} aria-hidden="true" className="shrink-0 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-2 text-[13px] font-medium text-foreground">
-                {agentName(s.user_agent)}
-                {s.current && <Badge variant="success">This device</Badge>}
-              </p>
-              <p className="tnum truncate text-[12px] text-muted-foreground">
-                {s.ip ? `${s.ip} · ` : ""}Active {ago(s.last_seen_at)}
-              </p>
-            </div>
-            {!s.current && (
-              <Button size="sm" variant="ghost" onClick={() => revoke(s.id)}>Sign out</Button>
-            )}
-          </li>
-        ))}
-      </ul>
-      {failed && <p role="alert" className="mt-2 text-[13px] text-destructive">{failed}</p>}
-      {others > 0 && (
-        <div className="mt-3">
-          <Button variant="secondary" onClick={revokeOthers}>Sign out of all other devices</Button>
-        </div>
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 shadow-card">
+      <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">
+        Sign out everywhere except this device. Useful if you used a shared computer.
+      </p>
+      <Button variant="secondary" onClick={signOutOthers} disabled={busy}>
+        <Laptop aria-hidden="true" /> {busy ? "Signing out" : "Sign out other devices"}
+      </Button>
+      {msg && (
+        <p role={msg.ok ? "status" : "alert"} className={msg.ok ? "w-full text-[13px] text-primary" : "w-full text-[13px] text-destructive"}>
+          {msg.text}
+        </p>
       )}
     </div>
   );
@@ -127,8 +99,8 @@ export default function Page() {
       <Section title="Password" hint="Changing your password signs you out everywhere else.">
         <ChangePassword />
       </Section>
-      <Section title="Where you are signed in" hint="Browsers that currently have access to your account.">
-        <Sessions />
+      <Section title="Other devices" hint="Browsers that are signed in to your account.">
+        <Devices />
       </Section>
     </>
   );

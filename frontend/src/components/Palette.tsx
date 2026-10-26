@@ -6,7 +6,7 @@ import { FileText, KeyRound, LogOut, Moon, Palette as PaletteIcon, PlugZap, Plus
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { api, setCsrf } from "@/lib/api";
+import { signOutNow } from "@/lib/auth/session";
 import { useTheme } from "@/lib/theme";
 
 function Row({ icon, children, onSelect }: { icon: ReactNode; children: ReactNode; onSelect: () => void }) {
@@ -44,8 +44,7 @@ export function Palette() {
 
   async function signOut() {
     setOpen(false);
-    await api("/v1/auth/logout", { method: "POST" }).catch(() => undefined);
-    setCsrf(null);
+    await signOutNow();
     router.push("/login");
   }
 

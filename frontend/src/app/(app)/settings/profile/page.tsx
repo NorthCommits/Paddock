@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { Section } from "@/components/section";
-import { ResendVerification } from "@/components/resend-verification";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, api, fetchMe, setCsrf } from "@/lib/api";
+import { ApiError, api, fetchMe } from "@/lib/api";
+import { signOutNow } from "@/lib/auth/session";
 import type { User } from "@/lib/api";
 import { day } from "@/lib/format";
 
@@ -42,8 +42,7 @@ export default function Page() {
   }
 
   async function signOut() {
-    await api("/v1/auth/logout", { method: "POST" }).catch(() => undefined);
-    setCsrf(null);
+    await signOutNow();
     router.push("/login");
   }
 
@@ -84,7 +83,9 @@ export default function Page() {
               ) : (
                 <>
                   <Badge>Not verified</Badge>
-                  <ResendVerification variant="ghost" />
+                  <LinkButton href={`/verify-email?email=${encodeURIComponent(me.user.email)}&next=/settings/profile`} variant="ghost" size="sm">
+                    Enter code
+                  </LinkButton>
                 </>
               )}
             </div>

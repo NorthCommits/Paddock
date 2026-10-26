@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { AuthLayout } from "@/components/AuthLayout";
-import { ResendVerification } from "@/components/resend-verification";
 import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, ROLE_LABEL, api, fetchMe, setCsrf } from "@/lib/api";
+import { ApiError, ROLE_LABEL, api, fetchMe } from "@/lib/api";
+import { signOutNow } from "@/lib/auth/session";
 import type { InvitePreview, Page } from "@/lib/api";
 
 export default function InvitePage() {
@@ -19,6 +19,11 @@ export default function InvitePage() {
   const me = useSWR("me", fetchMe, { shouldRetryOnError: false });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const needsHandle = me.error instanceof ApiError && me.error.code === "onboarding_required";
+  useEffect(() => {
+    if (needsHandle) router.replace(`/welcome?next=${encodeURIComponent(`/invites/${token}`)}`);
+  }, [needsHandle, router, token]);
 
   const here = `/invites/${token}`;
   const next = encodeURIComponent(here);
@@ -37,13 +42,7 @@ export default function InvitePage() {
   }
 
   async function switchAccount() {
-    try {
-      await api("/v1/auth/logout", { method: "POST" });
-    } catch {
-      // ignore, we reload either way
-    }
-    setCsrf(null);
-    await me.mutate(undefined, { revalidate: false });
+    await signOutNow();
     router.push(`/login?next=${next}&email=${email}`);
   }
 
@@ -83,7 +82,14 @@ export default function InvitePage() {
       <p className="mt-3"><Badge variant="success">{ROLE_LABEL[inv.role]}</Badge></p>
 
       <div className="mt-6 space-y-3">
-        {!signedIn && (
+        {needsHandle && (
+          <>
+            <p className="text-[13px] text-muted-foreground">One more step: pick a username, then come back here to accept.</p>
+            <LinkButton href={`/welcome?next=${next}`}>Choose a username</LinkButton>
+          </>
+        )}
+
+        {!signedIn && !needsHandle && (
           <>
             <p className="text-[13px] text-muted-foreground">Sign in with {inv.email} to accept.</p>
             <div className="flex flex-wrap gap-2">
@@ -105,9 +111,11 @@ export default function InvitePage() {
         {unverified && (
           <>
             <p className="text-[13px] text-muted-foreground">
-              Verify your email address first. Use the link we sent you, or ask for a new one.
+              Confirm your email address first, using the code we sent you.
             </p>
-            <ResendVerification />
+            <LinkButton href={`/verify-email?email=${encodeURIComponent(user.email)}&next=${next}`} variant="secondary">
+              Enter the code
+            </LinkButton>
           </>
         )}
 

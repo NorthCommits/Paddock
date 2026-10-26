@@ -23,6 +23,9 @@ TEST_DB_URL = _start_test_database()
 os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ["DATABASE_URL_UNPOOLED"] = TEST_DB_URL
 os.environ["ENVIRONMENT"] = "test"
+os.environ["NEON_AUTH_EMAIL_VERIFIED"] = "false"  # a local .env must not change test results
+os.environ["NEON_AUTH_URL"] = "https://auth.example.test/db/auth"
+os.environ["EMAIL_BACKEND"] = "console"
 STORAGE_DIR = tempfile.mkdtemp(prefix="paddock_test_files_")
 os.environ["STORAGE_LOCAL_PATH"] = STORAGE_DIR
 atexit.register(shutil.rmtree, STORAGE_DIR, ignore_errors=True)

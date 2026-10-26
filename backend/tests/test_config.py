@@ -41,6 +41,7 @@ def test_production_needs_the_neon_auth_address():
             secret_key="x" * 40,
             email_backend="smtp",
             smtp_host="smtp.example.com",
+            neon_auth_url=None,
         )
 
 
