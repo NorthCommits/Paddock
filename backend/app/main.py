@@ -1,4 +1,5 @@
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -34,9 +35,16 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_id(request: Request, call_next):
+        started = time.perf_counter()
         request.state.request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
         response = await call_next(request)
+        took_ms = (time.perf_counter() - started) * 1000
         response.headers["X-Request-ID"] = request.state.request_id
+        response.headers["Server-Timing"] = f"app;dur={took_ms:.0f}"
+        if took_ms > 1000:
+            logging.getLogger("paddock.slow").warning(
+                "%s %s took %.0f ms", request.method, request.url.path, took_ms
+            )
         return response
 
     register_error_handlers(app)

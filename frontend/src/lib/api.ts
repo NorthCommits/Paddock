@@ -160,8 +160,7 @@ async function fetchToken(): Promise<string | null> {
   return looksLikeJwt(body?.token) ? body.token : null;
 }
 
-async function bearer(): Promise<string | null> {
-  if (cached && cached.expires - 60_000 > Date.now()) return cached.token;
+async function loadToken(): Promise<string | null> {
   try {
     const token = await fetchToken();
     if (!token) return null;
@@ -172,6 +171,17 @@ async function bearer(): Promise<string | null> {
     console.warn("Could not get the sign-in token", err);
     return null;
   }
+}
+
+// Several requests start together when a screen opens. They share one token lookup instead of one each.
+let loading: Promise<string | null> | null = null;
+
+async function bearer(): Promise<string | null> {
+  if (cached && cached.expires - 60_000 > Date.now()) return cached.token;
+  loading ??= loadToken().finally(() => {
+    loading = null;
+  });
+  return loading;
 }
 
 export async function api<T>(

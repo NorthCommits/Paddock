@@ -1,0 +1,63 @@
+# Render Blueprint: the two backend services, both in Ohio next to the Neon database (US East).
+# Values marked sync: false are asked for in the Render dashboard when the Blueprint is created.
+# SECRET_KEY must be the same on both services. APP_ORIGIN and CONTENT_ORIGIN are set to the live
+# addresses (your Vercel address and the content service address).
+
+services:
+  - type: web
+    name: paddock-api
+    runtime: python
+    plan: free
+    region: ohio
+    branch: main
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run --no-dev alembic upgrade head && uv run --no-dev uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - { key: PYTHON_VERSION, value: 3.12.8 }
+      - { key: ENVIRONMENT, value: production }
+      - { key: EMAIL_BACKEND, value: console }
+      - { key: NEON_AUTH_EMAIL_VERIFIED, value: "true" }
+      - { key: STORAGE_BACKEND, value: s3 }
+      - { key: S3_BUCKET, sync: false }
+      - { key: S3_ENDPOINT_URL, sync: false }
+      - { key: S3_REGION, sync: false }
+      - { key: S3_ACCESS_KEY_ID, sync: false }
+      - { key: S3_SECRET_ACCESS_KEY, sync: false }
+      - { key: DATABASE_URL, sync: false }
+      - { key: DATABASE_URL_UNPOOLED, sync: false }
+      - { key: NEON_AUTH_URL, sync: false }
+      - { key: SECRET_KEY, sync: false }
+      - { key: APP_ORIGIN, sync: false }
+      - { key: CONTENT_ORIGIN, sync: false }
+
+  - type: web
+    name: paddock-content
+    runtime: python
+    plan: free
+    region: ohio
+    branch: main
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run --no-dev uvicorn app.content:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - { key: PYTHON_VERSION, value: 3.12.8 }
+      - { key: ENVIRONMENT, value: production }
+      - { key: EMAIL_BACKEND, value: console }
+      - { key: NEON_AUTH_EMAIL_VERIFIED, value: "true" }
+      - { key: STORAGE_BACKEND, value: s3 }
+      - { key: S3_BUCKET, sync: false }
+      - { key: S3_ENDPOINT_URL, sync: false }
+      - { key: S3_REGION, sync: false }
+      - { key: S3_ACCESS_KEY_ID, sync: false }
+      - { key: S3_SECRET_ACCESS_KEY, sync: false }
+      - { key: DATABASE_URL, sync: false }
+      - { key: DATABASE_URL_UNPOOLED, sync: false }
+      - { key: NEON_AUTH_URL, sync: false }
+      - { key: SECRET_KEY, sync: false }
+      - { key: APP_ORIGIN, sync: false }
+      - { key: CONTENT_ORIGIN, sync: false }

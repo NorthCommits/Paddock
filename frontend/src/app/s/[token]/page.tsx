@@ -6,19 +6,26 @@ import useSWR from "swr";
 import { Wordmark } from "@/components/brand";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WakeHint } from "@/components/wake-hint";
 import { ROLE_LABEL, api } from "@/lib/api";
 import type { Shared, ViewUrl } from "@/lib/api";
+import { waitForContent } from "@/lib/warm";
 
 const TWELVE_MINUTES = 12 * 60 * 1000; // view links last 15 minutes
 
 export default function SharedPage() {
   const { token } = useParams<{ token: string }>();
   const info = useSWR(["shared", token], () => api<Shared>(`/v1/shared/${token}`), { shouldRetryOnError: false });
+  // Asked for in parallel with the page details, not after them.
   const view = useSWR(
-    info.data ? ["shared-view", token] : null,
+    ["shared-view", token],
     () => api<ViewUrl>(`/v1/shared/${token}/view-url`, { method: "POST" }),
     { refreshInterval: TWELVE_MINUTES, revalidateOnFocus: false, shouldRetryOnError: false },
   );
+  const awake = useSWR(view.data ? "content-awake" : null, waitForContent, {
+    revalidateOnFocus: false,
+    dedupingInterval: 5 * 60 * 1000,
+  });
 
   if (info.error) {
     return (
@@ -52,11 +59,14 @@ export default function SharedPage() {
           Log in
         </Link>
       </header>
-      <div className="min-h-0 flex-1 bg-muted">
+      <div className="relative min-h-0 flex-1 bg-muted">
         {view.error ? (
           <p role="alert" className="p-6 text-[13px] text-destructive">{(view.error as Error).message}</p>
-        ) : !view.data ? (
-          <Skeleton className="m-6 h-[60%] w-[calc(100%-48px)]" />
+        ) : !view.data || !awake.data ? (
+          <div className="space-y-3 p-6">
+            <Skeleton className="h-[40vh] w-full" />
+            <WakeHint what="The page server" />
+          </div>
         ) : (
           <iframe
             key={view.data.url}
@@ -64,7 +74,7 @@ export default function SharedPage() {
             src={view.data.url}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
             referrerPolicy="no-referrer"
-            className="size-full border-0 bg-white"
+            className="absolute inset-0 size-full border-0 bg-white"
           />
         )}
       </div>

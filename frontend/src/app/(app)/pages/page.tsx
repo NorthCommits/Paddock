@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WakeHint } from "@/components/wake-hint";
 import { ROLE_LABEL, api } from "@/lib/api";
 import type { Page, PageList } from "@/lib/api";
 import { ago } from "@/lib/format";
@@ -103,6 +104,7 @@ function Pages() {
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
+          <WakeHint />
         </div>
       ) : data.items.length === 0 ? (
         <Empty onNew={() => setUploading(true)} />
