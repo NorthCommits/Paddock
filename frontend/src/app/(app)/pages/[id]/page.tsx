@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowLeft, Bot, ExternalLink, History, LogOut, Pencil, RotateCcw, Share2, Trash2, Upload, User, X } from "lucide-react";
+import { ArrowLeft, Bot, ExternalLink, History, MessageSquare, LogOut, Pencil, RotateCcw, Share2, Trash2, Upload, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
+import { CommentsPanel } from "@/components/comments-panel";
 import { ShareSheet } from "@/components/share-sheet";
 import { UploadSheet } from "@/components/upload-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ export default function PageViewer() {
 
   const [picked, setPicked] = useState<number | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -145,6 +147,9 @@ export default function PageViewer() {
             <Share2 aria-hidden="true" /> Share
           </Button>
         )}
+        <Button size="sm" variant={showComments ? "default" : "secondary"} onClick={() => setShowComments((v) => !v)} aria-pressed={showComments}>
+          <MessageSquare aria-hidden="true" /> Comments
+        </Button>
         <Button size="sm" variant={showHistory ? "default" : "secondary"} onClick={() => setShowHistory((v) => !v)} aria-pressed={showHistory}>
           <History aria-hidden="true" /> History
         </Button>
@@ -210,6 +215,18 @@ export default function PageViewer() {
         </div>
 
         <AnimatePresence initial={false}>
+          {showComments && p && (
+            <motion.aside
+              aria-label="Comments"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 384, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+              className="absolute inset-y-0 right-0 z-10 overflow-hidden border-l border-border bg-background md:static"
+            >
+              <CommentsPanel pageId={id} role={p.role} me={me.data?.user.id} version={shown} onClose={() => setShowComments(false)} />
+            </motion.aside>
+          )}
           {showHistory && (
             <motion.aside
               aria-label="Version history"

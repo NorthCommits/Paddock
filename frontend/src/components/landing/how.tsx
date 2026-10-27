@@ -9,7 +9,7 @@ import { Reveal } from "./motion-bits";
 const steps = [
   { icon: KeyRound, title: "Connect your agent", body: "Create a token with only the scopes it needs. Hand it to Claude Code, Codex, Cursor or any tool that can call an HTTP API." },
   { icon: FileText, title: "It publishes a page", body: "Reports, dashboards, mockups and small apps get a private address. Scripts and images come along in the bundle." },
-  { icon: MessageSquare, title: "Comment, mention, repeat", body: "Leave a note and mention @agent. The request reaches your agent live, and a new version comes back." },
+  { icon: MessageSquare, title: "Comment, mention, repeat", body: "Leave a note and mention @agent. Your agent picks up the request, and a new version comes back with a reply in the thread." },
 ];
 
 function Visual({ i }: { i: number }) {

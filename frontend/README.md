@@ -56,12 +56,12 @@ docs/DESIGN.md        design contract
 
 The mark is an original "Gate P": a geometric P whose bowl has an open gate. Sources are in `brand/`, exports in `public/brand/`.
 
-## Screens (milestone 3)
+## Screens (milestones 3 and 5)
 
 | Route | What it does |
 |---|---|
 | `/pages` | List of your pages, upload a new page (files or a folder), delete |
-| `/pages/{id}` | Page viewer in a sandboxed frame, version history, restore a version, publish a new version, rename |
+| `/pages/{id}` | Page viewer in a sandboxed frame, version history, restore a version, publish a new version, rename, and a Comments panel (threads, replies, resolve, edit, delete, @agent request status, dismiss a request) |
 | `/forgot-password`, `/reset-password`, `/verify-email` | Public screens for the emailed links. A banner in the app asks unverified people to confirm and lets them resend |
 | `/settings/profile` | Edit display name, see username and email, sign out |
 | `/settings/appearance` | Light, dark or system theme (stored in this browser) |

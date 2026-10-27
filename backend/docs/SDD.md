@@ -219,6 +219,16 @@ Visibility is a ceiling: `private` is the owner only (members and links stay sto
 - Anchors are optional JSON, for example `{"selector": "...", "quote": "...", "version": 7}`. The server stores them without interpreting them, and validates size only.
 - Editing a comment to add the mention creates a request. Removing the mention while the request is still open dismisses it.
 
+Decisions made in milestone 5:
+
+- Only comments written by a person create requests. A comment written by an agent token never does, which prevents loops.
+- Replies to a reply attach to the thread root, so threads are one level deep.
+- Anchors are kept on the first comment of a thread only and limited to 4096 bytes.
+- Only the author can edit. Adding a mention on edit creates or reopens the request. Removing it dismisses an open request with the reason "The mention was removed".
+- Deleting is soft. Owners and editors can delete any comment. Deleting dismisses an open or claimed request ("The comment was deleted"). A deleted first comment stays as a placeholder while it has replies.
+- Resolve and reopen apply to the first comment of a thread.
+- `GET /v1/requests` needs `comments:read` or `requests:act` and lists requests on pages the actor owns or is a member of (not private pages of others), oldest first.
+
 ### 5.4 Request state machine
 
 ```
@@ -230,8 +240,8 @@ open --dismiss--> dismissed
 ```
 
 - A claim lasts 10 minutes by default and can be extended by the same token with another claim call.
-- A background task returns expired claims to `open` and emits `request.reopened`.
-- Only a token with `requests:act` and editor rights on the page can claim.
+- Expired claims return to `open` when requests are listed or claimed, so no background job is needed (milestone 6 emits `request.reopened` when it adds events).
+- Only a token with `requests:act` and editor rights on the page can claim or complete. Browser logins cannot (403). Editors, as people or tokens, can dismiss.
 - `complete` requires a `result_version` that belongs to the same page and was published after the request was created. It also posts an agent reply into the thread.
 - A done or dismissed request cannot change state again.
 
@@ -348,7 +358,7 @@ Integration tests run against a temporary Neon branch or a local Postgres, with 
 2. **Accounts:** users, sessions, API tokens, policy module.
 3. **Pages and versions:** bundles, storage interface, versions, rollback, content gateway.
 4. **Sharing:** members, invites, share links.
-5. **Collaboration:** comments, mention detection, revision requests and state machine.
+5. **Collaboration (done):** comments, mention detection, revision requests and state machine.
 6. **Real time:** events table, hub, SSE streams, replay.
 7. **Webhooks:** outbox, worker, signing, retries.
 8. **CLI:** all commands, packaging, setup guide.

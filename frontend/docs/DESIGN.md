@@ -120,12 +120,13 @@ All interactive pieces come from Radix primitives for correct keyboard and scree
 | Sign up | Create an account | Password strength meter and show or hide toggle. Field errors from the API are shown in place. |
 | Log in | Return to the workspace | Show or hide toggle. |
 | Pages (home) | Show published pages | Empty state with an example preview. Pages arrive with the backend pages milestone. |
-| Connect an agent | Get an agent publishing | Three steps with copyable snippets in curl, Python and Node. |
+| Connect an agent | Get an agent publishing and answering requests | Four steps: token, environment variable, check, request loop (list, claim, complete) with copyable commands. |
+| Comments panel | Discuss a page and ask the agent for changes | Side panel in the viewer, opened from the toolbar. Filter Open, Resolved, All. Threads with replies, edit, delete, resolve. @agent is highlighted and shows a status chip: Waiting for agent, Agent working, Done in vN, Dismissed. Editors can dismiss a request. Viewers can read only. Refreshes on focus and after your own actions, no polling. |
 | Tokens | Manage agent tokens | List with status, create sheet with scopes, show-once secret, revoke confirmation. |
 | Account | See account details, sign out | |
 | Command palette | Go anywhere, create a token, sign out | Cmd K or Ctrl K. |
 
-Screens for pages, versions, comments, requests and sharing follow as their backend milestones are finished.
+Live updates of comments and requests follow with the real-time milestone.
 
 ## 8. Voice and microcopy
 

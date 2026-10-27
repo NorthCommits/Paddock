@@ -218,3 +218,35 @@ export async function api<T>(
 export async function fetchMe(): Promise<Me> {
   return api<Me>("/v1/me");
 }
+
+export type RequestStatus = "open" | "claimed" | "done" | "dismissed";
+
+export type CommentAuthor = { user_id: string | null; handle: string | null; display_name: string | null; by_agent: boolean };
+
+export type RequestInfo = {
+  id: string;
+  status: RequestStatus;
+  base_version: number | null;
+  result_version: number | null;
+  claim_expires_at: string | null;
+  dismiss_reason: string | null;
+};
+
+export type CommentItem = {
+  id: string;
+  page_id: string;
+  parent_id: string | null;
+  version_number: number | null;
+  author: CommentAuthor;
+  body: string;
+  mentions_agent: boolean;
+  created_at: string;
+  edited_at: string | null;
+  deleted: boolean;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  request: RequestInfo | null;
+};
+
+export type Thread = CommentItem & { replies: CommentItem[] };
+export type ThreadList = { items: Thread[] };

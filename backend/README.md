@@ -17,8 +17,10 @@ Design documents are in [`docs/`](docs): [PRD](docs/PRD.md), [Architecture](docs
 | Profile | `PATCH /v1/me`, `POST /v1/me/password`, `GET /v1/me/sessions`, `DELETE /v1/me/sessions/{id}`, `POST /v1/me/sessions/revoke-others` |
 | Sharing | `GET/POST /v1/pages/{id}/invites`, `GET/POST /v1/pages/{id}/links`, `GET /v1/pages/{id}/members`, role changes, removal, `POST /v1/invites/{token}/accept`, `GET /v1/shared/{token}` |
 | Viewing | `POST /v1/pages/{id}/view-url`, then open the URL on the content server |
+| Comments | `GET/POST /v1/pages/{id}/comments`, `PATCH/DELETE /v1/comments/{id}`, `POST /v1/comments/{id}/resolve` |
+| Requests | `GET /v1/requests`, `POST /v1/requests/{id}/claim`, `.../complete`, `.../dismiss` |
 
-Comments, requests and real-time streams are planned in later milestones (see SDD section 13).
+An `@agent` mention by a person opens a revision request. An agent token lists requests, claims one, publishes a version and completes it. Real-time streams arrive in milestone 6 (see SDD section 13), so agents poll `GET /v1/requests` for now.
 
 ## Requirements
 
