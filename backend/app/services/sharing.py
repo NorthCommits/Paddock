@@ -21,7 +21,7 @@ from app.schemas.sharing import (
     MemberOut,
     SharedOut,
 )
-from app.services import audit, emails, mailer, pages
+from app.services import audit, emails, events, mailer, pages
 
 INVITE_DAYS = 7
 MAX_MEMBERS = 50
@@ -116,6 +116,7 @@ async def remove_member(
         ip=ip,
         meta={"member": str(user_id), "left": leaving},
     )
+    await events.emit(db, page.id, "member.removed", {"user_id": str(user_id), "left": leaving})
     await db.commit()
 
 
@@ -301,6 +302,7 @@ async def accept_invite(db: AsyncSession, user: User, raw: str, ip: str | None) 
         ip=ip,
         meta={"role": invite.role},
     )
+    await events.emit(db, page.id, "member.added", {"user_id": str(user.id), "role": invite.role})
     await db.commit()
     return page, invite.role
 

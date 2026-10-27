@@ -16,7 +16,7 @@ from app.core.policy import allowed
 from app.core.signing import make_content_token
 from app.db.models import Blob, Page, PageMember, PageVersion, User, VersionFile
 from app.schemas.pages import PageOut, VersionDetailOut, VersionOut
-from app.services import audit
+from app.services import audit, events
 from app.services.bundles import CheckedFile, fingerprint
 from app.services.storage import get_storage, storage_key
 
@@ -274,6 +274,16 @@ async def create(
         ip=ip,
         meta={"slug": page.slug, "version": version.number},
     )
+    await events.emit(
+        db,
+        page.id,
+        "version.published",
+        {
+            "version": version.number,
+            "message": version.message,
+            "by_agent": actor.token is not None,
+        },
+    )
     await db.commit()
     return page, version
 
@@ -326,6 +336,16 @@ async def publish(
         ip=ip,
         meta={"version": version.number, "files": version.file_count},
     )
+    await events.emit(
+        db,
+        page.id,
+        "version.published",
+        {
+            "version": version.number,
+            "message": version.message,
+            "by_agent": actor.token is not None,
+        },
+    )
     await db.commit()
     return page, version, True
 
@@ -368,6 +388,12 @@ async def rollback(
         target_id=str(page.id),
         ip=ip,
         meta={"restored": old.number, "version": version.number},
+    )
+    await events.emit(
+        db,
+        page.id,
+        "version.rolled_back",
+        {"version": version.number, "restored": old.number, "by_agent": actor.token is not None},
     )
     await db.commit()
     return page, version, True
@@ -497,6 +523,7 @@ async def update_page(
         meta=changes,
     )
     try:
+        await events.emit(db, page.id, "page.updated", changes)  # this also saves the change
         await db.commit()
     except IntegrityError:
         await db.rollback()
@@ -516,6 +543,7 @@ async def delete_page(db: AsyncSession, actor, page_id: uuid.UUID, ip: str | Non
         target_id=str(page.id),
         ip=ip,
     )
+    await events.emit(db, page.id, "page.deleted", {})
     await db.commit()
 
 

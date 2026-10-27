@@ -15,9 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.db.models import Comment, Page, PageMember, PageVersion, RevisionRequest
 from app.schemas.comments import RequestComment, RequestItemOut, RequestListOut
-from app.services import audit
+from app.services import audit, events
 from app.services.comments import (
     author_out,
+    comment_created,
     request_out,
     users_by_id,
     version_numbers,
@@ -31,11 +32,14 @@ def _now() -> datetime:
 
 async def reopen_expired(db: AsyncSession) -> None:
     """Return claims that ran out to open. The caller commits."""
-    await db.execute(
+    result = await db.execute(
         update(RevisionRequest)
         .where(RevisionRequest.status == "claimed", RevisionRequest.claim_expires_at < _now())
         .values(status="open", claimed_by_token_id=None, claim_expires_at=None)
+        .returning(RevisionRequest.id, RevisionRequest.page_id)
     )
+    for request_id, page_id in result.all():
+        await events.emit(db, page_id, "request.reopened", {"request_id": str(request_id)})
 
 
 async def _items(db: AsyncSession, rows: list[RevisionRequest]) -> list[RequestItemOut]:
@@ -131,6 +135,7 @@ async def _load(db: AsyncSession, actor, request_id: uuid.UUID) -> RevisionReque
         request.status = "open"
         request.claimed_by_token_id = None
         request.claim_expires_at = None
+        await events.emit(db, request.page_id, "request.reopened", {"request_id": str(request.id)})
     return request
 
 
@@ -154,6 +159,12 @@ async def claim(db: AsyncSession, actor, request_id: uuid.UUID, *, minutes: int,
     request.status = "claimed"
     request.claimed_by_token_id = actor.token.id
     request.claim_expires_at = _now() + timedelta(minutes=minutes)
+    await events.emit(
+        db,
+        request.page_id,
+        "request.claimed",
+        {"request_id": str(request.id), "expires_at": request.claim_expires_at.isoformat()},
+    )
     audit.record(
         db,
         action="request.claim",
@@ -167,20 +178,22 @@ async def claim(db: AsyncSession, actor, request_id: uuid.UUID, *, minutes: int,
     return await _one(db, request)
 
 
-def _reply(
+async def _reply(
     db: AsyncSession, actor, request: RevisionRequest, comment: Comment, body: str, version_id
 ) -> None:
-    db.add(
-        Comment(
-            page_id=request.page_id,
-            version_id=version_id,
-            parent_id=comment.parent_id or comment.id,
-            author_user_id=actor.user.id,
-            author_token_id=actor.token.id if actor.token else None,
-            body=body,
-            mentions_agent=False,
-        )
+    reply = Comment(
+        page_id=request.page_id,
+        version_id=version_id,
+        parent_id=comment.parent_id or comment.id,
+        author_user_id=actor.user.id,
+        author_token_id=actor.token.id if actor.token else None,
+        body=body,
+        mentions_agent=False,
     )
+    db.add(reply)
+    await db.flush()
+    page = await db.get(Page, request.page_id)
+    await comment_created(db, page, reply, None, actor.token is not None)
 
 
 async def complete(
@@ -213,7 +226,15 @@ async def complete(
     request.status = "done"
     request.result_version_id = version.id
     request.claim_expires_at = None
-    _reply(db, actor, request, comment, reply or f"Published version {version.number}.", version.id)
+    await _reply(
+        db, actor, request, comment, reply or f"Published version {version.number}.", version.id
+    )
+    await events.emit(
+        db,
+        request.page_id,
+        "request.completed",
+        {"request_id": str(request.id), "result_version": version.number},
+    )
     audit.record(
         db,
         action="request.complete",
@@ -241,7 +262,10 @@ async def dismiss(
     if reason:
         comment = await db.get(Comment, request.comment_id)
         page = await db.get(Page, request.page_id)
-        _reply(db, actor, request, comment, reason, page.current_version_id)
+        await _reply(db, actor, request, comment, reason, page.current_version_id)
+    await events.emit(
+        db, request.page_id, "request.dismissed", {"request_id": str(request.id), "reason": reason}
+    )
     audit.record(
         db,
         action="request.dismiss",

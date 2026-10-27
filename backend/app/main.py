@@ -6,15 +6,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, comments, health, pages, sharing, tokens
+from app.api import auth, comments, events, health, pages, sharing, tokens, webhooks
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.db.session import get_engine
+from app.services import webhooks as webhooks_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if get_settings().webhook_worker:
+        webhooks_service.worker.start()
     yield
+    await webhooks_service.worker.stop()
     await get_engine().dispose()
 
 
@@ -55,6 +59,8 @@ def create_app() -> FastAPI:
     app.include_router(sharing.router)
     app.include_router(sharing.public)
     app.include_router(comments.router)
+    app.include_router(events.router)
+    app.include_router(webhooks.router)
     return app
 
 

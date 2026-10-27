@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # Where uploaded files live: "local" (a folder on disk) or "s3" (any S3-compatible bucket,
     # such as Cloudflare R2, Backblaze B2 or Supabase Storage). Use s3 when hosting, because
     # free hosts wipe the disk on restart.
+    # Webhooks. Private network addresses are refused unless this is on (tests only).
+    webhook_allow_private: bool = False
+    webhook_worker: bool = True
+
     storage_backend: str = "local"
     storage_local_path: str = "storage"
     s3_bucket: str | None = None

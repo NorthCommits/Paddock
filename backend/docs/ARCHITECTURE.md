@@ -71,6 +71,13 @@ An earlier idea was to fan events out with LISTEN/NOTIFY. On the Neon free plan,
 
 Decision for v1: run a single API instance with an in-process hub plus the durable events table for replay. The hub is an interface, so a LISTEN/NOTIFY or Redis implementation can be added when Paddock moves to multiple instances or a paid plan.
 
+### 4.3a How it is built (milestones 6 and 7)
+
+- `services/events.py` writes the event row with `emit()` inside the change's transaction. SQLAlchemy `after_commit` and `after_rollback` hooks publish to the hub only when the commit succeeds.
+- `emit()` also inserts a pending `webhook_deliveries` row for each matching webhook of the page owner, in the same transaction, then the commit wakes the worker.
+- The webhook worker runs inside the API process. It waits on an event or until the next delivery is due, so it adds no polling load. With several API instances, `FOR UPDATE SKIP LOCKED` keeps two workers from sending the same delivery, but the in-process hub would then need the LISTEN/NOTIFY or Redis replacement described above.
+- On a host that sleeps when idle (such as Render free), streams close when the instance stops, clients reconnect with `Last-Event-ID`, and pending webhook retries are sent after the instance wakes.
+
 ### 4.4 Cold starts
 
 With scale-to-zero, the first query after idle time is slower. Open SSE connections do not hold a database connection, so idle streams do not keep Neon awake. Only real activity does.
@@ -131,7 +138,8 @@ Paddock/
       core/          config, security, errors, logging
       db/            models, session, migrations
       services/      business logic (pages, versions, comments, requests, sharing)
-      events/        hub, outbox, webhook worker
+      events.py      event writing, in-process hub, replay and SSE streaming
+      webhooks.py    webhook management, signing, address checks, sender and worker
       storage/       storage interface and implementations
       content/       content gateway app
     cli/             paddock command line tool
