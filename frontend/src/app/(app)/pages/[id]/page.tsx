@@ -12,10 +12,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WakeHint } from "@/components/wake-hint";
 import { ApiError, ROLE_LABEL, api, fetchMe } from "@/lib/api";
 import type { Page, Publish, Version, VersionList, ViewUrl } from "@/lib/api";
 import { ago, bytes } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { waitForContent } from "@/lib/warm";
 
 const TWELVE_MINUTES = 12 * 60 * 1000; // view links last 15 minutes
 
@@ -40,11 +42,17 @@ export default function PageViewer() {
   const current = page.data?.current_version?.number ?? null;
   const shown = picked ?? current;
 
+  // Asked for straight away, in parallel with the page itself. No version means the latest one.
   const view = useSWR(
-    shown ? ["view", id, shown] : null,
-    () => api<ViewUrl>(`/v1/pages/${id}/view-url`, { method: "POST", body: { version: shown } }),
+    ["view", id, picked ?? "latest"],
+    () => api<ViewUrl>(`/v1/pages/${id}/view-url`, { method: "POST", body: { version: picked } }),
     { refreshInterval: TWELVE_MINUTES, revalidateOnFocus: false, shouldRetryOnError: false },
   );
+  // The content server may be asleep. Wait for it here instead of showing the host's waking-up screen.
+  const awake = useSWR(view.data ? "content-awake" : null, waitForContent, {
+    revalidateOnFocus: false,
+    dedupingInterval: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
     if (!notice) return;
@@ -53,7 +61,7 @@ export default function PageViewer() {
   }, [notice]);
 
   async function refresh() {
-    await Promise.all([page.mutate(), versions.mutate()]);
+    await Promise.all([page.mutate(), versions.mutate(), view.mutate()]);
   }
 
   async function doRollback() {
@@ -171,8 +179,11 @@ export default function PageViewer() {
         <div className="relative min-w-0 flex-1 bg-muted">
           {view.error ? (
             <p role="alert" className="p-6 text-[13px] text-destructive">{(view.error as Error).message}</p>
-          ) : !view.data ? (
-            <Skeleton className="m-6 h-[60%] w-[calc(100%-48px)]" />
+          ) : !view.data || !awake.data ? (
+            <div className="space-y-3 p-6">
+              <Skeleton className="h-[40vh] w-full" />
+              <WakeHint what="The page server" />
+            </div>
           ) : (
             <iframe
               key={view.data.url}
@@ -180,7 +191,7 @@ export default function PageViewer() {
               src={view.data.url}
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
               referrerPolicy="no-referrer"
-              className="size-full border-0 bg-white"
+              className="absolute inset-0 size-full border-0 bg-white"
             />
           )}
           <AnimatePresence>

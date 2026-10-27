@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Warm } from "@/components/warm";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -32,7 +33,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className="font-sans">{children}</body>
+      <body className="font-sans">
+        <Warm />
+        {children}
+      </body>
     </html>
   );
 }
