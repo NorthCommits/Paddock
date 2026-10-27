@@ -22,6 +22,8 @@ EXPECTED_TABLES = {
     "pages",
     "page_versions",
     "version_files",
+    "comments",
+    "revision_requests",
     "alembic_version",
 }
 

@@ -14,6 +14,13 @@ const snippets: Record<string, string> = {
     'const res = await fetch("https://your-paddock-address/api/v1/me", {\n  headers: { Authorization: `Bearer ${process.env.PADDOCK_TOKEN}` },\n});\nconsole.log(await res.json());',
 };
 
+const requestLoop = [
+  "curl -H \"Authorization: Bearer $PADDOCK_TOKEN\" https://your-paddock-address/api/v1/requests?status=open",
+  "curl -X POST -H \"Authorization: Bearer $PADDOCK_TOKEN\" https://your-paddock-address/api/v1/requests/REQUEST_ID/claim",
+  "# publish a new version of the page, then:",
+  "curl -X POST -H \"Authorization: Bearer $PADDOCK_TOKEN\" -H \"Content-Type: application/json\" \\\n  -d '{\"result_version\": 2, \"reply\": \"Shortened the intro.\"}' \\\n  https://your-paddock-address/api/v1/requests/REQUEST_ID/complete",
+].join("\n");
+
 function Step({ n, title, children, last }: { n: number; title: string; children: React.ReactNode; last?: boolean }) {
   return (
     <motion.li
@@ -55,8 +62,8 @@ export default function Page() {
             <CopyField label="environment variable" value="export PADDOCK_TOKEN=pdk_your_token" />
           </div>
         </Step>
-        <Step n={3} title="Check the connection" last>
-          <p className="mt-1 text-[13px] text-muted-foreground">This prints your account. Publishing pages arrives in the next release.</p>
+        <Step n={3} title="Check the connection">
+          <p className="mt-1 text-[13px] text-muted-foreground">This prints your account. Once it works, your agent can publish pages and read comments.</p>
           <div role="tablist" aria-label="Language" className="relative mt-3 inline-flex gap-1 rounded-md bg-card p-0.5 shadow-card">
             {Object.keys(snippets).map((k) => (
               <button
@@ -82,6 +89,15 @@ export default function Page() {
           </div>
           <div className="mt-2" role="tabpanel">
             <CopyField label={`${tab} snippet`} value={snippets[tab]} />
+          </div>
+        </Step>
+        <Step n={4} title="Answer requests" last>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            When someone mentions @agent in a comment, Paddock opens a request. The token needs the scopes comments:read and requests:act. Ask for open
+            requests, claim one, publish a new version, then complete it with the version number. A claim lasts 10 minutes unless you claim again.
+          </p>
+          <div className="mt-3">
+            <CopyField label="request loop" value={requestLoop} />
           </div>
         </Step>
       </ol>

@@ -9,6 +9,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -222,3 +223,67 @@ class VersionFile(Base):
     content_type: Mapped[str] = mapped_column(String(100))
 
     __table_args__ = (PrimaryKeyConstraint("version_id", "path", name="pk_version_files"),)
+
+
+class Comment(Base):
+    """A comment on a page, or a reply (parent_id points at the first comment of its thread)."""
+
+    __tablename__ = "comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("page_versions.id", ondelete="SET NULL")
+    )  # the version the author was looking at
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("comments.id", ondelete="CASCADE")
+    )
+    author_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    author_token_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)  # set when an agent wrote it
+    body: Mapped[str] = mapped_column(Text)
+    anchor: Mapped[dict | None] = mapped_column(JSONB)  # stored as sent, never interpreted
+    mentions_agent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = _now_column()
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+    __table_args__ = (
+        Index("ix_comments_page_id_created_at", "page_id", "created_at"),
+        Index("ix_comments_parent_id", "parent_id"),
+    )
+
+
+class RevisionRequest(Base):
+    """What an @agent mention turns into: work for an agent to pick up (SDD section 5.4)."""
+
+    __tablename__ = "revision_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    comment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("comments.id", ondelete="CASCADE"))
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    base_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("page_versions.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(String(10), default="open", server_default="open")
+    claimed_by_token_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    result_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("page_versions.id", ondelete="SET NULL")
+    )
+    dismiss_reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now_column()
+    updated_at: Mapped[datetime] = _now_column(onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("comment_id", name="uq_revision_requests_comment_id"),
+        Index("ix_revision_requests_page_id_status", "page_id", "status"),
+    )

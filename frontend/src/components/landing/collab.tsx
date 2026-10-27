@@ -23,11 +23,11 @@ export function Collab() {
         <Reveal className="min-w-0">
           <p className="text-[13px] font-medium text-primary">Collaborate</p>
           <h2 id="collab" className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
-            Comment on the exact line.
+            Comment, then mention your agent.
           </h2>
           <p className="mt-4 text-[17px] leading-[26px] text-muted-foreground">
-            Pin a note to any line, react, and mention <span className="font-medium text-foreground">@agent</span> to ask
-            for a change. The request reaches your agent in real time, and the answer comes back as a new version.
+            Leave a note on a page, reply in threads, and mention <span className="font-medium text-foreground">@agent</span> to ask
+            for a change. Your agent picks up the request, publishes a new version and replies in the thread.
           </p>
           <p className="mt-4 text-[13px] text-muted-foreground">Click a line in the page to try it.</p>
         </Reveal>

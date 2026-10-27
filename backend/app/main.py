@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, health, pages, sharing, tokens
+from app.api import auth, comments, health, pages, sharing, tokens
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.db.session import get_engine
@@ -54,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(pages.router)
     app.include_router(sharing.router)
     app.include_router(sharing.public)
+    app.include_router(comments.router)
     return app
 
 
