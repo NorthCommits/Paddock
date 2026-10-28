@@ -92,13 +92,15 @@ def general_wait(request: Request) -> int | None:
     return limiter.hit("anonymous" if who.startswith("ip:") else "general", who)
 
 
-def limit(rule: str):
-    """A route dependency that applies one of the stricter named limits."""
+def limit(rule: str, by_ip: bool = False):
+    """A route dependency that applies one of the stricter named limits. With by_ip the count
+    is per IP address whatever headers are sent, so a made-up credential buys no fresh allowance."""
 
     def check(request: Request) -> None:
         if not get_settings().rate_limit_enabled:
             return
-        wait = limiter.hit(rule, caller(request))
+        who = "ip:" + (caller_ip(request) or "unknown") if by_ip else caller(request)
+        wait = limiter.hit(rule, who)
         if wait is not None:
             raise AppError(
                 429,

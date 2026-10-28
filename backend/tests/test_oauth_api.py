@@ -307,9 +307,159 @@ async def test_register_is_rate_limited(client, monkeypatch):
     monkeypatch.setattr(ratelimit, "now", lambda: 1000.0)
     monkeypatch.setattr(ratelimit, "RULES", {**ratelimit.RULES, "register": 2})
     body = {"client_name": "x", "redirect_uris": [REDIRECT]}
-    assert (await client.post("/oauth/register", json=body)).status_code == 201
-    assert (await client.post("/oauth/register", json=body)).status_code == 201
-    r = await client.post("/oauth/register", json=body)
+    # A different made-up credential on every call must not give a fresh allowance.
+    codes = [
+        (
+            await client.post(
+                "/oauth/register", json=body, headers={"Authorization": f"Bearer junk-{i}"}
+            )
+        ).status_code
+        for i in range(2)
+    ]
+    assert codes == [201, 201]
+    r = await client.post(
+        "/oauth/register", json=body, headers={"Authorization": "Bearer junk-final"}
+    )
     assert r.status_code == 429
     assert int(r.headers["retry-after"]) >= 1
     ratelimit.limiter.windows.clear()
+
+
+async def test_consent_redirect_passes_only_named_parameters(client):
+    app = await register(client)
+    params = request_body(app["client_id"])
+    r = await client.get(
+        "/oauth/authorize",
+        params=[*params.items(), ("state", "second"), ("evil", "1")],
+    )
+    assert r.status_code == 302
+    query = parse_qs(urlsplit(r.headers["location"]).query)
+    assert set(query) == set(params)
+    assert all(len(v) == 1 for v in query.values())
+    assert "evil" not in query
+
+
+async def test_existing_redirect_query_is_kept_byte_for_byte(client):
+    uri = "https://app.example.com/cb?a=b%20c&flag"
+    app = await register(client, uris=[uri])
+    data = await signup(client)
+    r = await client.post(
+        "/v1/oauth/approve",
+        json={**request_body(app["client_id"], redirect_uri=uri), "decision": "allow"},
+        headers=csrf(data),
+    )
+    assert r.json()["redirect_to"].startswith(uri + "&code=")
+    bad = await client.get(
+        "/oauth/authorize",
+        params=request_body(app["client_id"], redirect_uri=uri, response_type="token"),
+    )
+    assert bad.headers["location"].startswith(uri + "&error=")
+
+
+async def test_register_without_name_uses_the_host_and_is_not_cached(client):
+    r = await client.post("/oauth/register", json={"redirect_uris": [REDIRECT]})
+    assert r.status_code == 201
+    assert r.json()["client_name"] == "app.example.com"
+    assert r.headers["cache-control"] == "no-store" and r.headers["pragma"] == "no-cache"
+
+
+async def test_register_failures_use_the_oauth_error_shape(client):
+    cases = [
+        ({"client_name": "x"}, "invalid_redirect_uri"),
+        ({"client_name": "x", "redirect_uris": []}, "invalid_redirect_uri"),
+        ({"client_name": "x", "redirect_uris": "https://a.example.com"}, "invalid_redirect_uri"),
+        ({"client_name": "x", "redirect_uris": ["http://evil.com/cb"]}, "invalid_redirect_uri"),
+        ({"client_name": 5, "redirect_uris": [REDIRECT]}, "invalid_client_metadata"),
+        ({"client_name": "n" * 101, "redirect_uris": [REDIRECT]}, "invalid_client_metadata"),
+    ]
+    for body, code in cases:
+        r = await client.post("/oauth/register", json=body)
+        assert r.status_code == 400, body
+        assert r.json()["error"] == code and r.json()["error_description"]
+    r = await client.post("/oauth/register", content=b"not json")
+    assert r.status_code == 400 and r.json()["error"] == "invalid_client_metadata"
+
+
+async def test_overlong_authorize_parameters_are_400_or_a_redirect(client):
+    app = await register(client)
+    r = await client.get(
+        "/oauth/authorize", params=request_body(app["client_id"], state="s" * 2001)
+    )
+    assert r.status_code == 400 and r.json()["error"] == "invalid_request"
+    r = await client.get(
+        "/oauth/authorize", params=request_body(app["client_id"], scope="pages:read " * 60)
+    )
+    assert r.status_code == 302
+    got = query_of(r.headers["location"])
+    assert got["error"] == "invalid_request" and got["state"] == "st-1"
+    r = await client.get(
+        "/oauth/authorize",
+        params=request_body(app["client_id"], redirect_uri="https://a.example.com/" + "a" * 1000),
+    )
+    assert r.status_code == 400
+
+
+async def test_missing_response_type_is_invalid_request(client):
+    app = await register(client)
+    params = request_body(app["client_id"])
+    del params["response_type"]
+    r = await client.get("/oauth/authorize", params=params)
+    assert r.status_code == 302 and query_of(r.headers["location"])["error"] == "invalid_request"
+    r = await client.get("/oauth/authorize", params={**params, "response_type": "token"})
+    assert query_of(r.headers["location"])["error"] == "unsupported_response_type"
+
+
+async def test_loopback_port_may_differ_end_to_end(client):
+    data = await signup(client)
+    app = await register(client, uris=["http://127.0.0.1:5555/cb"])
+    uri = "http://127.0.0.1:49152/cb"
+    r = await client.post(
+        "/v1/oauth/approve",
+        json={**request_body(app["client_id"], redirect_uri=uri), "decision": "allow"},
+        headers=csrf(data),
+    )
+    assert r.status_code == 200
+    target = r.json()["redirect_to"]
+    assert target.startswith("http://127.0.0.1:49152/cb?code=")
+    code = query_of(target)["code"]
+    other = await client.post(
+        "/oauth/token",
+        data=token_form(app["client_id"], code, redirect_uri="http://127.0.0.1:49153/cb"),
+    )
+    assert other.status_code == 400
+    # The failed attempt must not have used up the code.
+    ok = await client.post(
+        "/oauth/token", data=token_form(app["client_id"], code, redirect_uri=uri)
+    )
+    assert ok.status_code == 200
+
+
+async def test_state_round_trips_intact(client):
+    data = await signup(client)
+    app = await register(client)
+    state = "a&b=c #d+e f/%"
+    r = await client.post(
+        "/v1/oauth/approve",
+        json={**request_body(app["client_id"], state=state), "decision": "allow"},
+        headers=csrf(data),
+    )
+    assert query_of(r.json()["redirect_to"])["state"] == state
+    r = await client.post(
+        "/v1/oauth/approve",
+        json={**request_body(app["client_id"], state=state), "decision": "deny"},
+        headers=csrf(data),
+    )
+    assert query_of(r.json()["redirect_to"])["state"] == state
+
+
+async def test_approve_needs_the_bearer_header_not_a_cookie(client):
+    """Sign-in is a Bearer header only (no cookie sessions), so there is no CSRF surface:
+    a request carrying only cookies is refused."""
+    await signup(client)
+    app = await register(client)
+    del client.headers["Authorization"]
+    client.cookies.set("session", "anything")
+    r = await client.post(
+        "/v1/oauth/approve", json={**request_body(app["client_id"]), "decision": "allow"}
+    )
+    assert r.status_code == 401

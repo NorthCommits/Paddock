@@ -135,6 +135,8 @@ def check_request(
     response_type: str,
 ) -> list[str]:
     """Validate an authorization request. Returns the scopes that would be granted."""
+    if not response_type:
+        raise OAuthError("invalid_request", "response_type is required.")
     if response_type != "code":
         raise OAuthError("unsupported_response_type", "Only response_type=code is supported.")
     if not redirect_registered(client, redirect_uri):

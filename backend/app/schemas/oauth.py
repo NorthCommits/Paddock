@@ -3,11 +3,6 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-class RegisterIn(BaseModel):
-    client_name: str = Field(max_length=500)
-    redirect_uris: list[str] = Field(max_length=50)
-
-
 class RegisterOut(BaseModel):
     client_id: str
     client_name: str

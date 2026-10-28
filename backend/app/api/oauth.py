@@ -1,9 +1,9 @@
 """OAuth endpoints for agents: discovery, registration, authorize, consent and token."""
 
 from collections.abc import Callable
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, Form, Query, Request, Response
+from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRoute
 
@@ -15,7 +15,6 @@ from app.schemas.oauth import (
     ApproveOut,
     AuthRequestIn,
     PreviewOut,
-    RegisterIn,
     RegisterOut,
 )
 from app.services import oauth
@@ -48,11 +47,11 @@ router = APIRouter(route_class=OAuthRoute, tags=["oauth"])
 
 
 def with_query(uri: str, **params: str | None) -> str:
-    """Append parameters to a redirect address, keeping whatever query it already has."""
+    """Append parameters to a redirect address. The address's own query is kept byte for byte."""
     parts = urlsplit(uri)
-    query = parse_qsl(parts.query, keep_blank_values=True)
-    query += [(k, v) for k, v in params.items() if v is not None]
-    return urlunsplit(parts._replace(query=urlencode(query)))
+    added = urlencode([(k, v) for k, v in params.items() if v is not None])
+    query = f"{parts.query}&{added}" if parts.query else added
+    return urlunsplit(parts._replace(query=query))
 
 
 async def known_client(db, client_id: str | None, redirect_uri: str | None):
@@ -114,36 +113,77 @@ async def authorization_server():
     "/oauth/register",
     status_code=201,
     response_model=RegisterOut,
-    dependencies=[Depends(limit("register"))],
+    dependencies=[Depends(limit("register", by_ip=True))],
 )
-async def register(body: RegisterIn, db: DbDep):
-    client = await oauth.register_client(
-        db, client_name=body.client_name, redirect_uris=body.redirect_uris
-    )
-    return RegisterOut(
-        client_id=client.client_id,
-        client_name=client.client_name,
-        redirect_uris=list(client.redirect_uris),
+async def register(request: Request, db: DbDep):
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        raise oauth.OAuthError("invalid_client_metadata", "The body must be a JSON object.")
+    uris = body.get("redirect_uris")
+    if not isinstance(uris, list) or not uris or not all(isinstance(u, str) for u in uris):
+        raise oauth.OAuthError("invalid_redirect_uri", "redirect_uris must be a list of strings.")
+    name = body.get("client_name")
+    if name is None:
+        parts = urlsplit(uris[0])
+        name = (parts.netloc or parts.scheme or "App")[: oauth.MAX_NAME_LENGTH]
+    elif not isinstance(name, str):
+        raise oauth.OAuthError("invalid_client_metadata", "client_name must be a string.")
+    client = await oauth.register_client(db, client_name=name, redirect_uris=uris)
+    return JSONResponse(
+        RegisterOut(
+            client_id=client.client_id,
+            client_name=client.client_name,
+            redirect_uris=list(client.redirect_uris),
+        ).model_dump(),
+        status_code=201,
+        headers=NO_STORE,
     )
 
 
 # ------------------------------------------------------------------ authorize
 
 
+AUTHORIZE_LIMITS = {
+    "client_id": 200,
+    "redirect_uri": 1000,
+    "response_type": 20,
+    "code_challenge": 200,
+    "code_challenge_method": 20,
+    "scope": 500,
+    "state": 2000,
+}
+
+
 @router.get("/oauth/authorize")
 async def authorize(
-    request: Request,
     db: DbDep,
-    client_id: str | None = Query(default=None, max_length=200),
-    redirect_uri: str | None = Query(default=None, max_length=1000),
-    response_type: str = Query(default="", max_length=20),
-    code_challenge: str = Query(default="", max_length=200),
-    code_challenge_method: str = Query(default="", max_length=20),
-    scope: str | None = Query(default=None, max_length=500),
-    state: str | None = Query(default=None, max_length=2000),
+    client_id: str | None = None,
+    redirect_uri: str | None = None,
+    response_type: str = "",
+    code_challenge: str = "",
+    code_challenge_method: str = "",
+    scope: str | None = None,
+    state: str | None = None,
 ):
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": response_type,
+        "code_challenge": code_challenge,
+        "code_challenge_method": code_challenge_method,
+        "scope": scope,
+        "state": state,
+    }
+    too_long = [k for k, v in params.items() if v is not None and len(v) > AUTHORIZE_LIMITS[k]]
+    if "client_id" in too_long or "redirect_uri" in too_long or "state" in too_long:
+        raise oauth.OAuthError("invalid_request", "A request parameter is too long.")
     client = await known_client(db, client_id, redirect_uri)
     try:
+        if too_long:
+            raise oauth.OAuthError("invalid_request", "A request parameter is too long.")
         oauth.check_request(
             client,
             redirect_uri=redirect_uri,
@@ -158,7 +198,9 @@ async def authorize(
         )
         return RedirectResponse(target, status_code=302, headers=NO_STORE)
     consent = f"{get_settings().app_origin.rstrip('/')}/oauth/consent"
-    return RedirectResponse(f"{consent}?{request.url.query}", status_code=302, headers=NO_STORE)
+    # Only the named, validated parameters are passed on.
+    query = urlencode([(k, v) for k, v in params.items() if v])
+    return RedirectResponse(f"{consent}?{query}", status_code=302, headers=NO_STORE)
 
 
 # ------------------------------------------------------- consent (person only)
