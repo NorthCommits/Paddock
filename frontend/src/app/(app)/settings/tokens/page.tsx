@@ -78,8 +78,11 @@ function Tokens() {
                 <motion.li key={t.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.05, duration: 0.35, ease: [0.2, 0, 0, 1] }} className="flex items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className={`truncate text-[13px] font-medium ${inactive ? "text-subtle" : "text-foreground"}`}>{t.name}</p>
+                      <p className={`truncate text-[13px] font-medium ${inactive ? "text-subtle" : "text-foreground"}`}>
+                        {t.source === "oauth" ? t.name.replace(/ \(connected with sign-in\)$/, "") : t.name}
+                      </p>
                       <Badge variant={s.tone}>{s.label}</Badge>
+                      {t.source === "oauth" && <Badge>Connected with sign-in</Badge>}
                     </div>
                     <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
                       <span className="font-mono">{t.prefix}</span> · {t.scopes.join(", ")}
