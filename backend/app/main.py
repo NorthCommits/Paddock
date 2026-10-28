@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.routing import Route
 
 from app.api import auth, comments, events, health, pages, sharing, tokens, webhooks
 from app.api import oauth as oauth_api
@@ -13,6 +14,7 @@ from app.core import ratelimit
 from app.core.config import get_settings
 from app.core.errors import error_response, register_error_handlers
 from app.db.session import get_engine
+from app.mcp import server as mcp_server
 from app.services import retention
 from app.services import webhooks as webhooks_service
 
@@ -22,7 +24,8 @@ async def lifespan(app: FastAPI):
     if get_settings().webhook_worker:
         webhooks_service.worker.start()
     cleanup = asyncio.create_task(retention.loop()) if get_settings().retention_enabled else None
-    yield
+    async with mcp_server.running():
+        yield
     if cleanup:
         cleanup.cancel()
     await webhooks_service.worker.stop()
@@ -123,6 +126,9 @@ def create_app() -> FastAPI:
     app.include_router(events.router)
     app.include_router(webhooks.router)
     app.include_router(oauth_api.router)
+    # The MCP endpoint answers on /mcp and /mcp/ alike (a mount would redirect one to the other).
+    for path in ("/mcp", "/mcp/"):
+        app.router.routes.append(Route(path, endpoint=mcp_server.mcp_app))
     return app
 
 

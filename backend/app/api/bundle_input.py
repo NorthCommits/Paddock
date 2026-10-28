@@ -103,6 +103,20 @@ def _read_manifest(raw: str) -> dict[str, str]:
         ) from None
 
 
+def decode_file(path: str, content: str, encoding: str = "utf-8") -> IncomingFile:
+    """Turn one {path, content, encoding} item into file bytes. Shared with the MCP tools."""
+    if encoding == "base64":
+        try:
+            data = base64.b64decode(content, validate=True)
+        except (binascii.Error, ValueError):
+            raise AppError(422, "validation_failed", f"{path}: invalid base64") from None
+    elif encoding in ("utf-8", "utf8"):
+        data = content.encode()
+    else:
+        raise AppError(422, "validation_failed", "encoding must be 'utf-8' or 'base64'")
+    return IncomingFile(path=path, data=data)
+
+
 async def _read_json(request: Request, limit: int) -> BundleRequest:
     body = await request.body()
     if len(body) > limit * 2 + OVERHEAD:
@@ -120,15 +134,6 @@ async def _read_json(request: Request, limit: int) -> BundleRequest:
             item = _JsonFile.model_validate(raw)
         except ValidationError as exc:
             raise AppError(422, "validation_failed", f"files: {exc.errors()[0]['msg']}") from None
-        if item.encoding == "base64":
-            try:
-                content = base64.b64decode(item.content, validate=True)
-            except (binascii.Error, ValueError):
-                raise AppError(422, "validation_failed", f"{item.path}: invalid base64") from None
-        elif item.encoding in ("utf-8", "utf8"):
-            content = item.content.encode()
-        else:
-            raise AppError(422, "validation_failed", "encoding must be 'utf-8' or 'base64'")
-        result.files.append(IncomingFile(path=item.path, data=content))
+        result.files.append(decode_file(item.path, item.content, item.encoding))
     result.fields = {k: str(v) for k, v in data.items() if k != "files" and v is not None}
     return result
