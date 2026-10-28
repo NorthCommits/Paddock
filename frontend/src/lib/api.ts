@@ -26,6 +26,8 @@ export type TokenRow = {
   last_used_at: string | null;
   expires_at: string | null;
   revoked_at: string | null;
+  /** "manual" for a token the person made, "oauth" for one made by connecting an app. */
+  source: string;
 };
 
 export type Role = "owner" | "editor" | "commenter" | "viewer";
@@ -217,6 +219,26 @@ export async function api<T>(
 
 export async function fetchMe(): Promise<Me> {
   return api<Me>("/v1/me");
+}
+
+// Connecting an app by signing in (the consent page). The body carries the request the app made.
+export type OAuthRequest = {
+  client_id: string;
+  redirect_uri: string;
+  code_challenge: string;
+  code_challenge_method: string;
+  response_type: string;
+  scope?: string;
+  state?: string;
+};
+export type OAuthPreview = { client_name: string; redirect_host: string; scopes: string[] };
+
+export function oauthPreview(body: OAuthRequest): Promise<OAuthPreview> {
+  return api<OAuthPreview>("/v1/oauth/preview", { method: "POST", body });
+}
+
+export function oauthApprove(body: OAuthRequest, decision: "allow" | "deny"): Promise<{ redirect_to: string }> {
+  return api<{ redirect_to: string }>("/v1/oauth/approve", { method: "POST", body: { ...body, decision } });
 }
 
 export type RequestStatus = "open" | "claimed" | "done" | "dismissed";
