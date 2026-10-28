@@ -137,6 +137,31 @@ uv export --frozen --no-dev --no-hashes --no-emit-project > /tmp/req.txt
 pip-audit -r /tmp/req.txt --no-deps --disable-pip
 ```
 
+## Connecting apps by signing in (added after the review above)
+
+Apps such as Claude Desktop connect through OAuth 2.1 for public clients: the API is its own sign-in server and also serves the MCP endpoint at `/mcp`. The access token an app receives is an ordinary Paddock agent token (`pdk_...`), so it is hashed at rest, scoped, listed in Settings and revocable like any other.
+
+What the code does:
+
+- **Public clients only.** There are no client secrets. Every request uses PKCE with `S256`; `plain` is refused.
+- **Redirect addresses are matched exactly.** An address must be registered first. The one exception is the loopback rule (RFC 8252): for `http://127.0.0.1`, `localhost` or `[::1]` the port may differ. Fragments, embedded user names, whitespace and control characters are refused. An unknown app or an unregistered redirect address gets an error page and is never redirected to.
+- **One time codes.** A code lives 10 minutes, is stored only as a hash and can be used once. Using a code a second time revokes the token it produced.
+- **Only a verified person can approve.** Approval needs the person's own sign-in with a confirmed email. An agent token cannot approve, so an agent cannot grant itself or another app more access. Deny creates nothing.
+- **The person sees what they grant.** The consent page shows the app name, where the person will return to, and the permissions in plain words. Only five scopes are offered; `events:read` is not.
+- **Connecting again replaces the old connection** for the same app and person, so reconnecting does not leave stale tokens behind.
+- **Abuse controls.** Registration is limited to 20 per minute per caller address (keyed on the address, not on request headers). Token and approval calls use the existing limits. The MCP tools share the REST limits, including `publish` and `view`.
+- **Open cross origin access without credentials.** `/oauth`, `/.well-known` and `/mcp` accept any origin but never cookies, because authentication there is a bearer token only. For the same reason the library's DNS rebinding host check is turned off; it would reject every real host name, and a page that rebinds to the API holds no credential to abuse.
+- **MCP tools use the same rules as REST.** Each tool call opens its own database session, checks the token again (a revoked token stops working at the next call), and goes through the same service functions, scopes, verified email rule, size and path limits, and audit records. Another person's page or request answers "not found".
+- **Cleanup.** Old codes and unused app registrations are removed by the daily retention job.
+
+Open items:
+
+1. **No audience binding.** A token made by connecting an app works on the REST API as well as on `/mcp`, limited by its scopes, as any agent token does. The `resource` parameter is accepted by some apps but not enforced.
+2. **Registration is open.** Anyone can register an app name, as dynamic registration requires. Names are shown on the consent page, so a person could be shown a misleading app name. The page therefore also shows the return address.
+3. **Per address limits depend on `PROXY_HOPS`.** A wrong value makes everyone share the registration limit or lets a caller pick their own address.
+4. **Tokens from apps do not expire.** They stay valid until revoked. Revoke in Settings, then Tokens.
+5. **Not yet tested against the real apps.** Tests use a stand-in client. Follow `docs/MANUAL-CONNECT-CHECKLIST.md` before relying on it.
+
 ## Open items and limits
 
 1. **Single instance.** The rate limiter, the live event hub and the retention loop live in the

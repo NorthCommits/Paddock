@@ -10,6 +10,10 @@ Paddock is inspired by the idea behind Spacesheep. It is an original project: no
 
 Paddock never calls a language model. It stores no model keys and runs no inference. All intelligence lives in the agents that users connect with their own API tokens. Paddock is the hosting, versioning, collaboration and notification layer.
 
+## Connect an app in one step
+
+People can connect Claude Desktop, ChatGPT, Claude Code or Codex without copying a token. On the Connect page they pick their tool, paste one address (or run one command) and click Allow. Behind it, the API is an OAuth 2.1 sign-in server and an MCP server at `/mcp` with eight tools: list and read pages, publish a page or a new version, read and answer comments, and claim and complete requests. Tokens still work for scripts and the command line. See [the deployment guide](backend/docs/DEPLOYMENT.md#connecting-apps-by-signing-in) and the [manual checklist](docs/MANUAL-CONNECT-CHECKLIST.md).
+
 ## Status
 
 | Part | State |
@@ -29,6 +33,7 @@ Paddock never calls a language model. It stores no model keys and runs no infere
 | Backend, milestone 9: rate limits, retention, security review, Docker image, deployment guide | Done |
 | Frontend, first release | Done: landing page, sign up (with password strength meter), log in, app shell with command palette, Pages (empty state), Connect an agent, Tokens, Account |
 | Frontend for milestones 6 and 7: live updates in the viewer and Pages list, Webhooks screen in Settings | Done |
+| One step app connection: sign-in server, MCP endpoint, consent page, redesigned Connect page | Built and tested with a stand-in client; needs the real app checklist |
 
 ## Repository layout
 

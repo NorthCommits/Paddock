@@ -33,6 +33,9 @@ services:
       - { key: SECRET_KEY, sync: false }
       - { key: APP_ORIGIN, sync: false }
       - { key: CONTENT_ORIGIN, sync: false }
+      # The public address of this API, no trailing slash. Apps that connect by signing in use it as the
+      # sign-in server address, so fill it in with the live address (for example https://paddock-api-xxxx.onrender.com).
+      - { key: API_PUBLIC_URL, sync: false }
 
   - type: web
     name: paddock-content
