@@ -34,7 +34,7 @@ Flow, with the standard MCP authorization steps:
 2. The tool reads `/.well-known/oauth-protected-resource`, then `/.well-known/oauth-authorization-server`.
 3. The tool registers itself at `POST /oauth/register` (dynamic client registration) and gets a `client_id`.
 4. The tool opens the browser at `GET /oauth/authorize` with PKCE (S256) and the redirect address it registered.
-5. The API validates the request and redirects to the frontend page `/oauth/consent`, passing a signed, short-lived request reference.
+5. The API validates the request and redirects to the frontend page `/oauth/consent`, carrying the original, already validated query parameters. Approval re-validates everything, so nothing in that URL is trusted.
 6. The person logs in if needed, sees who is asking and what it may do, and clicks Allow or Deny.
 7. The frontend calls `POST /v1/oauth/approve` as the signed-in person. The API returns the redirect URL carrying a single-use code. Deny returns `error=access_denied`.
 8. The tool calls `POST /oauth/token` with the code and the PKCE verifier and receives an access token.
@@ -52,13 +52,14 @@ No refresh tokens. The access token does not expire. Revoking it in Settings mak
 | `GET /.well-known/oauth-authorization-server` | Metadata: endpoints, `S256`, `none` client auth, `authorization_code`, scopes |
 | `POST /oauth/register` | Dynamic client registration, rate limited per IP |
 | `GET /oauth/authorize` | Validates the request, redirects to the consent page |
+| `POST /v1/oauth/preview` | Signed-in person only. Returns the client name, redirect host and scopes for the consent page |
 | `POST /v1/oauth/approve` | Signed-in person only. Creates the code or the deny redirect |
 | `POST /oauth/token` | Exchanges code plus verifier for the access token |
 
 Rules:
 
 - PKCE with S256 is required. Plain is refused.
-- Redirect address must exactly match one registered. Allowed: `https` addresses and `http` on `localhost` or `127.0.0.1` (needed by Claude Code and Codex).
+- Redirect address must exactly match one registered, with one exception: for `http` loopback addresses (`localhost`, `127.0.0.1`, `[::1]`) the port may differ (RFC 8252), because Claude Code and Codex choose a free port at run time. Allowed addresses: `https`, `http` on loopback, and private-use custom schemes (at least 3 characters, not `javascript`, `data`, `file`, `vbscript`, `blob`, `about`, and not `http`) so Cursor works.
 - Codes are random, stored hashed, valid for 10 minutes and usable once. A second use revokes the token it produced.
 - The `resource` parameter, if sent, must equal our MCP address.
 - Scopes offered: `pages:read pages:write comments:read comments:write requests:act`. `events:read` is not offered.
@@ -67,7 +68,7 @@ Rules:
 ### 3.2 Data (migration `0008_oauth.py`)
 
 - `oauth_clients`: `id`, `client_id` (unique), `client_name`, `redirect_uris` (JSON list), `created_at`, `last_used_at`.
-- `oauth_codes`: `code_hash` (unique), `client_id`, `user_id`, `redirect_uri`, `code_challenge`, `scopes`, `expires_at`, `used_at`.
+- `oauth_codes`: `code_hash` (unique), `client_id`, `user_id`, `redirect_uri`, `code_challenge`, `scopes`, `expires_at`, `used_at`, `token_id` (nullable, the token the code produced, so reuse can revoke it).
 - `api_tokens`: add nullable `client_id` and a `source` column (`manual` or `oauth`). Existing rows become `manual`.
 - Retention loop deletes expired codes and clients unused for 30 days that have no live token.
 
@@ -107,6 +108,8 @@ Large files: the body cap that already protects the API applies. Tool errors ret
 ### 3.5 Cross-origin
 
 OAuth and MCP routes allow any origin without cookies (they use Bearer tokens and PKCE), so browser-based clients work. The consent approval call comes from our frontend through the existing proxy.
+
+Settings: `API_PUBLIC_URL` on the backend (the API's public origin, issuer and MCP host) and `NEXT_PUBLIC_MCP_URL` on the frontend (the full MCP address shown on the Connect page).
 
 ## 4. Security
 

@@ -25,7 +25,7 @@
 
 ## Review Focus
 
-1. Redirect address that differs in any way from a registered one (trailing slash, extra query, other port): refused, never redirected to.
+1. Redirect address that differs from a registered one (trailing slash, extra query, other host, other port on a non-loopback address): refused, never redirected to. A different port on a loopback address is allowed.
 2. Authorization code used twice: the second use fails and the token it produced stops working.
 3. Person clicks Deny: the client gets `error=access_denied` and no token exists.
 4. Revoked token calling `/mcp`: a clean 401 with the metadata hint, never a 500.
@@ -39,7 +39,7 @@
 
 **Files:** Modify `docs/superpowers/specs/2026-10-28-one-step-agent-connect-design.md`
 
-- [ ] **Step 1:** Edit the spec to match these decisions made while planning: (a) the authorize endpoint validates then redirects to the consent page carrying the original, already validated query parameters (no signed reference); approve re-validates everything; (b) add `POST /v1/oauth/preview` returning client name, redirect host and scopes for the consent page; (c) redirect rules also allow private-use custom schemes (at least 3 characters, not `javascript`, `data`, `file`, `vbscript`, `blob`, `about`, and not `http`) so Cursor works; (d) `oauth_codes` gains a nullable `token_id` so reuse can revoke the issued token; (e) settings `API_PUBLIC_URL` and frontend `NEXT_PUBLIC_MCP_URL`.
+- [ ] **Step 1:** Edit the spec to match these decisions made while planning: (a) the authorize endpoint validates then redirects to the consent page carrying the original, already validated query parameters (no signed reference); approve re-validates everything; (b) add `POST /v1/oauth/preview` returning client name, redirect host and scopes for the consent page; (c) loopback redirects ignore the port when matching, and redirect rules also allow private-use custom schemes (at least 3 characters, not `javascript`, `data`, `file`, `vbscript`, `blob`, `about`, and not `http`) so Cursor works; (d) `oauth_codes` gains a nullable `token_id` so reuse can revoke the issued token; (e) settings `API_PUBLIC_URL` and frontend `NEXT_PUBLIC_MCP_URL`.
 - [ ] **Step 2:** Commit: `git add docs && git commit -m "Amend the connection spec with planning decisions"`.
 
 ### Task 1: Dependency, settings, migration and models
@@ -71,13 +71,13 @@
   - `redirect_ok(uri: str) -> bool` (https; http on `localhost`, `127.0.0.1`, `[::1]`; private-use scheme rule from the spec)
   - `async register_client(db, *, client_name: str, redirect_uris: list[str]) -> OAuthClient` (raises `OAuthError("invalid_redirect_uri" | "invalid_client_metadata", description)` for empty list, more than 10 uris, uri over 500 characters, name over 100)
   - `async get_client(db, client_id: str) -> OAuthClient | None`
-  - `check_request(client: OAuthClient, *, redirect_uri, code_challenge, code_challenge_method, scope: str | None, response_type) -> list[str]` returns the granted scopes; raises `OAuthError` (`invalid_request`, `unsupported_response_type`, `invalid_scope`) and requires exact string equality with a registered uri and `S256`
+  - `check_request(client: OAuthClient, *, redirect_uri, code_challenge, code_challenge_method, scope: str | None, response_type) -> list[str]` returns the granted scopes; raises `OAuthError` (`invalid_request`, `unsupported_response_type`, `invalid_scope`) and requires exact string equality with a registered uri (the one exception: for http loopback addresses `localhost`, `127.0.0.1` and `[::1]` the port may differ, RFC 8252 section 7.3) and `S256`
   - `async approve(db, user, client, *, redirect_uri, code_challenge, scopes, ip) -> str` returns the raw code
   - `async exchange(db, *, client_id, code, code_verifier, redirect_uri, ip) -> tuple[str, list[str]]` returns raw token and scopes; raises `OAuthError("invalid_grant", ...)`
   - `class OAuthError(Exception)` with `code: str`, `description: str`
 - Consumes: `tokens.create`, `security.new_secret`, `security.sha256_hex`, `audit.record`.
 
-- [ ] **Step 1: Write failing tests** (one function each, using real DB fixtures like `test_tokens.py`): `test_redirect_ok_rules` (https yes, `http://localhost:33445/cb` yes, `http://evil.com/cb` no, `javascript:alert(1)` no, `cursor://anysphere.cursor/oauth` yes); `test_register_limits`; `test_check_request_requires_exact_redirect_and_s256` (trailing slash differs, `plain` refused); `test_exchange_happy_path_creates_oauth_token` (token has `source == "oauth"`, `client_id` set, name is `"<client_name> (connected with sign-in)"` cut to 100 characters, no expiry); `test_code_is_single_use_and_reuse_revokes_token`; `test_code_expires_after_ten_minutes`; `test_wrong_verifier_or_redirect_fails`; `test_reauthorizing_same_client_leaves_one_live_token`.
+- [ ] **Step 1: Write failing tests** (one function each, using real DB fixtures like `test_tokens.py`): `test_redirect_ok_rules` (https yes, `http://localhost:33445/cb` yes, `http://evil.com/cb` no, `javascript:alert(1)` no, `cursor://anysphere.cursor/oauth` yes); `test_register_limits`; `test_check_request_requires_exact_redirect_and_s256` (trailing slash differs, `plain` refused, loopback port may differ but loopback path may not); `test_exchange_happy_path_creates_oauth_token` (token has `source == "oauth"`, `client_id` set, name is `"<client_name> (connected with sign-in)"` cut to 100 characters, no expiry); `test_code_is_single_use_and_reuse_revokes_token`; `test_code_expires_after_ten_minutes`; `test_wrong_verifier_or_redirect_fails`; `test_reauthorizing_same_client_leaves_one_live_token`.
 - [ ] **Step 2:** Run `uv run pytest tests/test_oauth_service.py -v`; expect FAIL.
 - [ ] **Step 3:** Implement. Approach: store `sha256(code)`; PKCE check is `base64url(sha256(verifier))` without padding compared with `security.same_value`; in `exchange`, load the code row `with_for_update`, if `used_at` is set revoke the token in `token_id` and raise `invalid_grant`; otherwise mark used, revoke the user's older live tokens with the same `client_id`, create the token through `tokens.create`, store `token_id`, and update `client.last_used_at`. Audit `oauth.register`, `oauth.approve`, `oauth.token`.
 - [ ] **Step 4:** Run the tests; expect PASS. Run the whole `tests/test_tokens.py` to confirm `tokens.create` still behaves.
