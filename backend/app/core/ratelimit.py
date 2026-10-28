@@ -26,6 +26,7 @@ RULES = {
     "request": 120,  # claim, complete or dismiss a request
     "manage": 20,  # create tokens, webhooks, invitations and share links
     "stream": 30,  # open a live event stream
+    "register": 20,  # register an agent app through OAuth, per IP address
     "view": 120,  # ask for a link to view a page
 }
 

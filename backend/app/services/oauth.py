@@ -118,6 +118,13 @@ async def get_client(db: AsyncSession, client_id: str) -> OAuthClient | None:
     return await db.scalar(select(OAuthClient).where(OAuthClient.client_id == client_id))
 
 
+def redirect_registered(client: OAuthClient, redirect_uri: str) -> bool:
+    """Is this redirect address one the client registered (loopback ports aside)?"""
+    return redirect_ok(redirect_uri) and any(
+        _same_redirect(registered, redirect_uri) for registered in client.redirect_uris
+    )
+
+
 def check_request(
     client: OAuthClient,
     *,
@@ -130,9 +137,7 @@ def check_request(
     """Validate an authorization request. Returns the scopes that would be granted."""
     if response_type != "code":
         raise OAuthError("unsupported_response_type", "Only response_type=code is supported.")
-    if not redirect_ok(redirect_uri) or not any(
-        _same_redirect(registered, redirect_uri) for registered in client.redirect_uris
-    ):
+    if not redirect_registered(client, redirect_uri):
         raise OAuthError("invalid_request", "The redirect address is not registered.")
     if code_challenge_method != "S256":
         raise OAuthError("invalid_request", "code_challenge_method must be S256.")

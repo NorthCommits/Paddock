@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, comments, events, health, pages, sharing, tokens, webhooks
+from app.api import oauth as oauth_api
 from app.core import ratelimit
 from app.core.config import get_settings
 from app.core.errors import error_response, register_error_handlers
@@ -50,20 +51,46 @@ def early_refusal(request: Request, settings):
     return None
 
 
+OPEN_CORS_PREFIXES = ("/oauth", "/.well-known", "/mcp")
+
+
+class PathCORS:
+    """Agent-facing paths allow any origin without credentials; everything else keeps the
+    site-only, credentialed rules."""
+
+    def __init__(self, app, *, app_origin: str):
+        self.open = CORSMiddleware(
+            app,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["X-Request-ID", "WWW-Authenticate", "Mcp-Session-Id"],
+        )
+        self.site = CORSMiddleware(
+            app,
+            allow_origins=[app_origin],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["X-Request-ID"],
+        )
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "") if scope["type"] == "http" else ""
+        if any(path == p or path.startswith(p + "/") for p in OPEN_CORS_PREFIXES):
+            await self.open(scope, receive, send)
+        else:
+            await self.site(scope, receive, send)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
 
     app = FastAPI(title="Paddock API", version="0.1.0", lifespan=lifespan)
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[settings.app_origin],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
-    )
+    app.add_middleware(PathCORS, app_origin=settings.app_origin)
 
     @app.middleware("http")
     async def request_id(request: Request, call_next):
@@ -95,6 +122,7 @@ def create_app() -> FastAPI:
     app.include_router(comments.router)
     app.include_router(events.router)
     app.include_router(webhooks.router)
+    app.include_router(oauth_api.router)
     return app
 
 

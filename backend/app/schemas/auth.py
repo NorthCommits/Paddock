@@ -72,6 +72,7 @@ class TokenOut(BaseModel):
     id: uuid.UUID
     name: str
     prefix: str
+    source: str
     scopes: list[str]
     created_at: datetime
     last_used_at: datetime | None
