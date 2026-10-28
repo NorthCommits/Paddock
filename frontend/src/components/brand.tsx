@@ -1,26 +1,38 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion,  } from "motion/react";
+import { useCalm } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 export const MARK_PATH =
   "M68 36H143A53 53 0 0 1 194.62 77H157.73A19 19 0 0 0 143 70H102V108H143A19 19 0 0 0 157.73 101H194.62A53 53 0 0 1 143 142H102V220H68Z";
 
-/** The app icon: white Gate P on a green rounded square. */
+/** The app icon: ink Gate P on an ember rounded square. Ember is the brand's 10% accent. */
 export function Mark({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 256 256" aria-hidden="true" className="text-primary">
-      <rect width="256" height="256" rx="58" fill="currentColor" />
-      <path transform="translate(20 4) scale(0.88)" fill="var(--primary-foreground)" d={MARK_PATH} />
+    <svg width={size} height={size} viewBox="0 0 256 256" aria-hidden="true">
+      <rect width="256" height="256" rx="58" fill="var(--signal)" />
+      <path transform="translate(20 4) scale(0.88)" fill="#0f1115" d={MARK_PATH} />
     </svg>
   );
 }
 
-export function Wordmark({ size = 20, className }: { size?: number; className?: string }) {
+export function Wordmark({
+  size = 20,
+  className,
+  tone = "default",
+}: {
+  size?: number;
+  className?: string;
+  tone?: "default" | "band";
+}) {
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
       <Mark size={size} />
-      <span className="font-semibold tracking-[-0.01em] text-foreground" style={{ fontSize: size * 0.85 }}>
+      <span
+        className={cn("font-display font-semibold tracking-[-0.02em]", tone === "band" ? "text-band-foreground" : "text-foreground")}
+        style={{ fontSize: size * 0.85 }}
+      >
         Paddock
       </span>
     </span>
@@ -28,8 +40,8 @@ export function Wordmark({ size = 20, className }: { size?: number; className?: 
 }
 
 /** Large Gate P with an agent dot that travels through the gate. */
-export function GateMark({ className, dot = "var(--primary)" }: { className?: string; dot?: string }) {
-  const reduce = useReducedMotion();
+export function GateMark({ className, dot = "var(--signal)" }: { className?: string; dot?: string }) {
+  const reduce = useCalm();
   return (
     <svg viewBox="0 0 256 256" aria-hidden="true" className={className}>
       <path transform="translate(-4 0)" fill="currentColor" d={MARK_PATH} />

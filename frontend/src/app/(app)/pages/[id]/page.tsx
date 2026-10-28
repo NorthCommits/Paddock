@@ -234,6 +234,7 @@ export default function PageViewer() {
         <AnimatePresence initial={false}>
           {showComments && p && (
             <motion.aside
+              key="comments"
               aria-label="Comments"
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 384, opacity: 1 }}
@@ -246,6 +247,7 @@ export default function PageViewer() {
           )}
           {showHistory && (
             <motion.aside
+              key="history"
               aria-label="Version history"
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 320, opacity: 1 }}
@@ -401,28 +403,30 @@ function Title({ page, canRename, onSaved }: { page: Page; canRename: boolean; o
 
   if (!canRename) {
     return (
-      <span className="flex min-w-0 items-center gap-2 px-2 py-1">
+      <h1 className="flex min-w-0 items-center gap-2 px-2 py-1">
         <span className="truncate text-[15px] font-semibold text-foreground">{page.title}</span>
-        <span className="hidden text-[12px] text-subtle sm:inline">by @{page.owner_handle}</span>
-      </span>
+        <span className="hidden text-[12px] font-normal text-subtle sm:inline">by @{page.owner_handle}</span>
+      </h1>
     );
   }
 
   if (!editing) {
     return (
-      <button
-        onClick={() => {
-          setTitle(page.title);
-          setSlug(page.slug);
-          setEditing(true);
-        }}
-        className="group flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-muted"
-        aria-label="Rename page"
-      >
-        <span className="truncate text-[15px] font-semibold text-foreground">{page.title}</span>
-        <span className="hidden font-mono text-[12px] text-subtle sm:inline">{page.slug}</span>
-        <Pencil size={13} aria-hidden="true" className="text-subtle opacity-0 transition-opacity group-hover:opacity-100" />
-      </button>
+      <h1 className="min-w-0">
+        <button
+          onClick={() => {
+            setTitle(page.title);
+            setSlug(page.slug);
+            setEditing(true);
+          }}
+          className="group flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-muted"
+        >
+          <span className="truncate text-[15px] font-semibold text-foreground">{page.title}</span>
+          <span className="hidden font-mono text-[12px] font-normal text-subtle sm:inline">{page.slug}</span>
+          <span className="sr-only">Rename page</span>
+          <Pencil size={13} aria-hidden="true" className="text-subtle opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+        </button>
+      </h1>
     );
   }
 
@@ -433,13 +437,13 @@ function Title({ page, canRename, onSaved }: { page: Page; canRename: boolean; o
         aria-label="Title"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="h-8 w-48 rounded-md border border-border bg-card px-2 text-[13px] text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
+        className="h-8 w-48 rounded-md border border-input-border bg-card px-2 text-[13px] text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
       />
       <input
         aria-label="Slug"
         value={slug}
         onChange={(e) => setSlug(e.target.value)}
-        className="h-8 w-40 rounded-md border border-border bg-card px-2 font-mono text-[12px] text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
+        className="h-8 w-40 rounded-md border border-input-border bg-card px-2 font-mono text-[12px] text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
       />
       <Button size="sm" type="submit">Save</Button>
       <Button size="sm" type="button" variant="ghost" onClick={() => { setEditing(false); setError(""); }}>Cancel</Button>

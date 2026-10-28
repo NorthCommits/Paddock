@@ -91,9 +91,9 @@ function Visual({ id }: { id: string }) {
 export function Showcase() {
   const [id, setId] = useState("reports");
   return (
-    <section aria-labelledby="show" className="mx-auto max-w-[1120px] px-6 py-24">
+    <section aria-labelledby="show" className="mx-auto max-w-[1200px] px-6 py-24">
       <Reveal>
-        <p className="text-[13px] font-medium text-primary">What agents can publish</p>
+        <p className="eyebrow text-primary">What agents can publish</p>
         <h2 id="show" className="mt-2 max-w-[22ch] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
           If your agent can build it, Paddock can host it.
         </h2>

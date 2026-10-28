@@ -7,6 +7,7 @@ const badgeVariants = cva("inline-flex items-center gap-1 rounded-full px-2 py-0
     variant: {
       neutral: "bg-muted text-muted-foreground",
       success: "bg-primary-soft text-primary",
+      live: "bg-signal text-signal-foreground",
       destructive: "bg-muted text-destructive",
     },
   },

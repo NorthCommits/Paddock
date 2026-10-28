@@ -38,63 +38,39 @@ All values live as CSS variables and Tailwind theme entries. Raw colours and pix
 
 ### Colour (light / dark)
 
-Token names follow shadcn semantics (`background`, `foreground`, `card`, `muted`, `primary`, ...). The neutrals are warm, like paper, so the green feels at home.
+Colour follows the 60-30-10 rule, chosen for a bold, professional look:
+
+- **60% neutral.** Paper (light) or ink (dark): backgrounds, cards, body text.
+- **30% indigo.** Structure: the app sidebar, bands on the landing page, links, selection, focus rings, badges.
+- **10% ember.** The one thing to press or watch: main buttons, live signals, the logo square. Ember is never used as text on paper (2.5:1); it is a fill with ink text on it (6.7:1), or text on ink and indigo.
+
+Token names follow shadcn semantics, plus `signal` (ember), `band` (indigo section), `ink` (always-dark section) and `input-border`.
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| background | #FBFAF6 | #161715 | Main surfaces |
-| muted | #F1EFE8 | #0F100E | Grouped background, chips, code wells |
-| card | #FFFFFF | #222421 | Cards, sheets, popovers |
-| foreground | #1D1D1B | #F3F2EC | Primary text |
-| muted-foreground | #66655E | #A6A59C | Supporting text |
-| subtle | #6C6B63 | #939289 | Placeholders, captions |
-| border | rgba(40,36,20,0.12) | rgba(255,255,240,0.13) | Hairlines |
-| primary | #2B7A4B | #5FBF85 | Buttons, links, selection |
-| primary-foreground | #FFFFFF | #0B2415 | Text on primary |
-| primary-soft | #E4F0E8 | #1E3326 | Tinted panels, avatars, badges |
-| destructive | #D70015 | #FF453A | Destructive actions and errors |
+| background | #F5F3EE | #0F1115 | Main surfaces |
+| muted | #ECE9E1 | #0B0D10 | Grouped background, chips, code wells |
+| card | #FFFFFF | #181B22 | Cards, sheets, popovers |
+| foreground | #0F1115 | #F5F3EE | Primary text |
+| muted-foreground | #565A66 | #A3A7B3 | Supporting text |
+| subtle | #5F6370 | #8E93A0 | Placeholders, captions |
+| border | rgba(15,17,21,0.14) | rgba(245,243,238,0.14) | Hairlines |
+| input-border | #7C808C | #7C808C | Form field outlines (3:1 or better) |
+| primary (indigo) | #3B33C9 | #A79BFF | Links, selection, focus, brand text |
+| primary-foreground | #FFFFFF | #0F1115 | Text on primary |
+| primary-soft | #E6E4FA | #25225F | Tinted panels, avatars, badges |
+| signal (ember) | #FF6B4A | #FF6B4A | Main buttons, live signals |
+| signal-foreground | #0F1115 | #0F1115 | Text on ember |
+| band | #1E1B5E | #2D2A8C | Sidebar, landing bands |
+| ink | #0F1115 | #0F1115 | Landing sections that stay dark in both themes |
+| destructive | #C4122F | #FF7A85 | Destructive actions and errors |
+| warning | #8A4B00 | #FFB347 | Warnings |
 
-Measured contrast (WCAG): foreground on background 16.2 and 16.0; muted-foreground on background 5.6 and 7.3, on muted 5.1 and 7.7; primary on background 5.0 and 8.0; white on primary 5.3; dark text on dark-mode primary 7.3; primary on primary-soft 4.5 and 6.0. Every new pair is checked by script before use.
+Every text and control pair is checked by `npm run check:contrast` (65 checks, WCAG AA, light and dark). It fails if a token change breaks a ratio. Run it after editing `globals.css`.
 
-Rules: one accent only. No gradients. No colour as the only signal. Text contrast at least 4.5:1, large text and icons at least 3:1. The theme follows the system setting.
+Type: Sora for display headings on the landing page and the logo word, an italic Instrument Serif for one emphasised word per heading, JetBrains Mono for small labels and code, and the system font inside the app.
 
-### Typography
-
-- Font stack: `-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif`. On Apple devices this is SF Pro, with the correct optical sizes chosen by the system. No web font is downloaded and Apple's fonts are not bundled. On other systems the platform font is used.
-- Mono: `ui-monospace, "SF Mono", Menlo, Consolas, monospace` for tokens, code and shortcuts.
-- Letter spacing is left at the font's default, except large display text (negative) and all-caps labels (positive).
-- Numbers that change use tabular figures.
-
-| Role | Size / line | Weight |
-|---|---|---|
-| Display (marketing hero) | 56 / 60 | 600, tracking -0.03em |
-| Title (page title) | 22 / 28 | 600 |
-| Headline (section, card title) | 15 / 20 | 600 |
-| Body (app) | 13 / 18 | 400 |
-| Reading (long text, marketing body) | 17 / 26 | 400 |
-| Secondary | 12 / 16 | 400, text-secondary |
-| Caption | 11 / 14 | 400 |
-
-Body text is left aligned everywhere. Only display titles and single call-to-action blocks are centred. Light weights are not used below 20px.
-
-### Spacing, size and shape
-
-- 4px grid: 4, 8, 12, 16, 20, 24, 32, 48, 64.
-- Corner radii, three only: 6 (small controls, keyboard keys), 10 (buttons, inputs, cards), 14 (popovers, sheets, windows). Pills only for tags.
-- Control heights: 28 (toolbar), 32 (default), 40 (forms and marketing). On touch screens controls are at least 44.
-- Layout widths: sidebar 240, forms 360 to 440, settings content 640, lists 960.
-- Borders are hairlines. Shadows only on floating layers (popovers, sheets, command palette), soft and low opacity, never pure black at full strength.
-
-### Motion
-
-Tools: the `motion` package for entrances, scroll reveals, shared-layout indicators (`layoutId`) and exits; CSS keyframes (`tw-animate-css`) for dialogs. Patterns in use: word-by-word headline rise, looping product illustration, scroll reveal with stagger, fence posts that grow in, an agent dot passing through the gate, spring-moving nav and tab indicators, page-to-page fade, list items entering in sequence. The landing page also has a scroll progress bar, a pinned three-step section, and interactive demos (a hero where you mention the agent and get a new version, click-to-comment lines, tabs of what agents can publish). Demos are labelled as simulations. Everything respects reduced motion (`useReducedMotion` and a global media query).
-
-
-- Durations: 120ms (hover, press), 200ms (small reveals), 320ms (sheets and larger moves).
-- Curves: enter `cubic-bezier(0.2, 0, 0, 1)`; sheets `cubic-bezier(0.32, 0.72, 0, 1)`; exits are faster than enters.
-- Only transform and opacity are animated. Animations can be interrupted. Nothing bounces except a rare celebration.
-- With reduced motion on, movement is replaced by a simple fade.
-- No spinner for anything under 500ms. Loading content uses skeletons that match the final layout, so nothing jumps.
+Rules: one hot colour (ember) per screen. No colour as the only signal (status always has words or a shape). Text contrast at least 4.5:1, large text and icons at least 3:1. The theme follows the system setting. Motion stops or simplifies when the system asks for reduced motion, and anything that moves by itself has a pause button.
 
 ## 5. Layout and navigation
 
@@ -156,7 +132,7 @@ Indigo, purple or pink gradients; glow orbs and blurred blobs; the Inter font; l
 
 ## 12. Decisions made
 
-1. **Accent colour.** Warm green, values in section 4.
+1. **Accent colour.** Indigo and ember, 60-30-10, values in section 4. (Changed from warm green in the October 2026 revamp.)
 2. **Landing page.** Built in the first release.
-3. **Mark and wordmark.** An original geometric "P" whose bowl has an open gate (a space people and agents can enter), designed with the logo-design process (concepts in `brand/concepts`, chosen: Gate P). Wordmark is the symbol plus the word "Paddock" set live in the system font at semibold. The app icon is the white mark on an accent rounded square. Assets: `brand/` (sources) and `public/brand/` (exports). It can be swapped by replacing those files.
+3. **Mark and wordmark.** An original geometric "P" whose bowl has an open gate (a space people and agents can enter), designed with the logo-design process (concepts in `brand/concepts`, chosen: Gate P). Wordmark is the symbol plus the word "Paddock" set live in the system font at semibold. The app icon is the ink mark on an ember rounded square. Assets: `brand/` (sources) and `public/brand/` (exports). It can be swapped by replacing those files.
 4. **API access.** Same-origin proxy: Next rewrites `/api/:path*` to the backend, which keeps the login cookie simple in development and production.

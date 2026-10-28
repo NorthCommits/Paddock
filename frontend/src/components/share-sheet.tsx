@@ -54,7 +54,7 @@ function Select({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
-        "h-8 rounded-md border border-border bg-card px-2 text-[13px] text-foreground transition-[border-color,box-shadow] duration-[120ms] hover:border-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25",
+        "h-8 rounded-md border border-input-border bg-card px-2 text-[13px] text-foreground transition-[border-color,box-shadow] duration-[120ms] hover:border-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25",
         className,
       )}
     >
@@ -237,7 +237,7 @@ export function ShareSheet({
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@company.com"
               autoComplete="off"
-              className="h-8 min-w-0 flex-1 basis-48 rounded-md border border-border bg-card px-2.5 text-[13px] text-foreground placeholder:text-subtle hover:border-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
+              className="h-8 min-w-0 flex-1 basis-48 rounded-md border border-input-border bg-card px-2.5 text-[13px] text-foreground placeholder:text-subtle hover:border-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
             />
             <Select label="Role for the invited person" value={inviteRole} onChange={(v) => setInviteRole(v as MemberRole)}>
               {ROLES.map((r) => (

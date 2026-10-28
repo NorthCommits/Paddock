@@ -6,7 +6,7 @@ import { Suspense, useState } from "react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { PasswordField } from "@/components/password-field";
 import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/input";
+import { OtpInput } from "@/components/otp-input";
 import { authClient } from "@/lib/auth/client";
 import { authMessage } from "@/lib/auth/session";
 
@@ -44,7 +44,7 @@ function Reset() {
         Enter the code we sent to {email || "your email"}, then pick something you do not use anywhere else.
       </p>
       <form onSubmit={submit} className="mt-7 flex flex-col gap-4" noValidate>
-        <Field id="code" name="code" label="Code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} />
+        <OtpInput id="code" name="code" />
         <PasswordField id="next" name="next" label="New password" meter autoComplete="new-password" />
         <PasswordField id="again" name="again" label="Repeat new password" autoComplete="new-password" />
         {error && (

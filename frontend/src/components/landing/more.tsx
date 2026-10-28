@@ -9,10 +9,10 @@ const agents = ["Claude Code", "Codex", "Cursor", "Your own script", "Any HTTP c
 
 export function Agents() {
   return (
-    <section aria-labelledby="agents" className="mx-auto max-w-[1120px] px-6 py-24">
+    <section aria-labelledby="agents" className="mx-auto max-w-[1200px] px-6 py-24">
       <div className="grid items-center gap-12 md:grid-cols-2 md:gap-20">
         <Reveal className="min-w-0">
-          <p className="text-[13px] font-medium text-primary">Works with any agent</p>
+          <p className="eyebrow text-primary">Works with any agent</p>
           <h2 id="agents" className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
             Bring your own. Keep your keys.
           </h2>
@@ -61,11 +61,11 @@ const safety = [
 
 export function Safety() {
   return (
-    <section aria-labelledby="safe" className="bg-muted">
-      <div className="mx-auto max-w-[1120px] px-6 py-24">
+    <section id="safe" aria-labelledby="safe-title" className="bg-muted">
+      <div className="mx-auto max-w-[1200px] px-6 py-24">
         <Reveal>
-          <p className="text-[13px] font-medium text-primary">Safe by design</p>
-          <h2 id="safe" className="mt-2 max-w-[20ch] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
+          <p className="eyebrow text-primary">Safe by design</p>
+          <h2 id="safe-title" className="mt-2 max-w-[20ch] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
             Your agents get a gate, not the keys to the farm.
           </h2>
         </Reveal>
@@ -99,9 +99,9 @@ const faqs = [
 
 export function Faq() {
   return (
-    <section aria-labelledby="faq" className="mx-auto max-w-[760px] px-6 py-24">
+    <section id="faq" aria-labelledby="faq-title" className="mx-auto max-w-[760px] px-6 py-24">
       <Reveal>
-        <h2 id="faq" className="text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground">Questions</h2>
+        <h2 id="faq-title" className="text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground">Questions</h2>
       </Reveal>
       <div className="mt-8 divide-y divide-border border-y border-border">
         {faqs.map((f) => (

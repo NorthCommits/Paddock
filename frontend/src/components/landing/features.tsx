@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { FileCode2, Image as ImageIcon, Folder } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Reveal } from "./motion-bits";
+import { Reveal, SpotlightCard } from "./motion-bits";
 
 const card =
   "group relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-card transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-float";
@@ -26,10 +26,10 @@ function LiveStream() {
             key={n}
             layout
             initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: n === i ? 1 : 0.55, y: 0 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.35, ease: [0.2, 0, 0, 1] }}
-            className="flex items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 text-foreground"
+            className={`flex items-center gap-2 rounded-md bg-muted px-2.5 py-1.5 ${n === i ? "text-foreground" : "text-muted-foreground"}`}
           >
             <span className="relative flex size-1.5">
               {n === i && <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />}
@@ -133,11 +133,11 @@ export function Features() {
     <div className="grid gap-4 md:grid-cols-2">
       {items.map((it, k) => (
         <Reveal key={it.t} delay={(k % 2) * 0.08}>
-          <div className={card}>
+          <SpotlightCard className={card}>
             <h3 className="text-[17px] font-semibold text-foreground">{it.t}</h3>
             <p className="mt-1 max-w-[34ch] text-[15px] leading-[22px] text-muted-foreground">{it.d}</p>
             {it.v}
-          </div>
+          </SpotlightCard>
         </Reveal>
       ))}
     </div>

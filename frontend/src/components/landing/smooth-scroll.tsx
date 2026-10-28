@@ -1,7 +1,7 @@
 "use client";
 
 import "locomotive-scroll/locomotive-scroll.css";
-import { motion, useReducedMotion, useScroll, useSpring } from "motion/react";
+import { useCalm } from "@/lib/motion";
 import { useEffect } from "react";
 
 /**
@@ -10,9 +10,7 @@ import { useEffect } from "react";
  * It is switched off when the person prefers reduced motion. Touch devices keep native momentum.
  */
 export function SmoothScroll() {
-  const reduce = useReducedMotion();
-  const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, { stiffness: 140, damping: 28, mass: 0.4 });
+  const reduce = useCalm();
 
   useEffect(() => {
     if (reduce) return;
@@ -21,7 +19,7 @@ export function SmoothScroll() {
     import("locomotive-scroll").then(({ default: LocomotiveScroll }) => {
       if (cancelled) return;
       scroll = new LocomotiveScroll({
-        lenisOptions: { lerp: 0.085, wheelMultiplier: 0.95, anchors: true },
+        lenisOptions: { lerp: 0.085, wheelMultiplier: 0.95, anchors: { offset: -56 } },
       });
     });
     return () => {
@@ -30,11 +28,5 @@ export function SmoothScroll() {
     };
   }, [reduce]);
 
-  return (
-    <motion.div
-      aria-hidden="true"
-      className="fixed inset-x-0 top-0 z-40 h-[2px] origin-left bg-primary"
-      style={{ scaleX }}
-    />
-  );
+  return null;
 }
