@@ -24,12 +24,14 @@ async def lifespan(app: FastAPI):
     if get_settings().webhook_worker:
         webhooks_service.worker.start()
     cleanup = asyncio.create_task(retention.loop()) if get_settings().retention_enabled else None
-    async with mcp_server.running():
-        yield
-    if cleanup:
-        cleanup.cancel()
-    await webhooks_service.worker.stop()
-    await get_engine().dispose()
+    try:
+        async with mcp_server.running():
+            yield
+    finally:
+        if cleanup:
+            cleanup.cancel()
+        await webhooks_service.worker.stop()
+        await get_engine().dispose()
 
 
 SECURITY_HEADERS = {
@@ -43,8 +45,7 @@ SECURITY_HEADERS = {
 def early_refusal(request: Request, settings):
     """Turn away oversized bodies and callers who are over their limit before any work is done."""
     declared = request.headers.get("content-length", "")
-    biggest = settings.max_bundle_bytes * 2 + 2 * 1024 * 1024
-    if declared.isdigit() and int(declared) > biggest:
+    if declared.isdigit() and int(declared) > settings.max_request_bytes:
         return error_response(request, 413, "payload_too_large", "The request body is too large")
     wait = ratelimit.general_wait(request)
     if wait is not None:

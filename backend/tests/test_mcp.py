@@ -413,3 +413,188 @@ async def test_publish_page_shares_the_rest_publish_rate_limit(client, monkeypat
         assert "Too many requests" in message
     finally:
         ratelimit.limiter.windows.clear()
+
+
+async def test_get_page_shares_the_rest_view_rate_limit(client, monkeypatch):
+    from app.core import ratelimit
+
+    data, token = await agent_token(client)
+    page_id = (
+        await client.post(
+            "/v1/pages",
+            json={"title": "T", "files": [{"path": "index.html", "content": "<p>x</p>"}]},
+            headers=auth(data),
+        )
+    ).json()["page"]["id"]
+    monkeypatch.setattr(config.get_settings(), "rate_limit_enabled", True)
+    monkeypatch.setattr(ratelimit, "RULES", {**ratelimit.RULES, "view": 2})
+    ratelimit.limiter.windows.clear()
+    try:
+        # One REST view-url call and one get_page use up the shared allowance of two.
+        r = await client.post(f"/v1/pages/{page_id}/view-url", headers=auth(token=token))
+        assert r.status_code == 200, r.text
+        async with connected(token) as c:
+            ok(await c.call_tool("get_page", {"page_id": page_id}))
+            message = failed(await c.call_tool("get_page", {"page_id": page_id}))
+        assert "Too many requests" in message
+    finally:
+        ratelimit.limiter.windows.clear()
+
+
+async def test_other_users_pages_and_requests_stay_hidden(client):
+    ana, _ = await agent_token(client)
+    page = (
+        await client.post(
+            "/v1/pages",
+            json={"title": "Ana", "files": [{"path": "index.html", "content": "<p>a</p>"}]},
+            headers=auth(ana),
+        )
+    ).json()["page"]
+    request_id = await ask(client, ana, page["id"])
+    threads = (await client.get(f"/v1/pages/{page['id']}/comments", headers=auth(ana))).json()
+    comment_id = threads["items"][0]["id"]
+
+    bo = await signup(client, email="bo@example.com", handle="bobo")
+    bo_token = (await make_token(client, bo, scopes=AGENT_SCOPES))["token"]
+    files = [{"path": "index.html", "content": "<p>b</p>"}]
+    async with connected(bo_token) as c:
+        calls = [
+            ("get_page", {"page_id": page["id"]}),
+            ("list_comments", {"page_id": page["id"]}),
+            ("reply_to_comment", {"page_id": page["id"], "comment_id": comment_id, "body": "hi"}),
+            ("publish_page", {"title": "x", "page_id": page["id"], "files": files}),
+        ]
+        for name, args in calls:
+            assert "Page not found" in failed(await c.call_tool(name, args)), name
+        for name, args in [
+            ("claim_request", {"request_id": request_id}),
+            ("complete_request", {"request_id": request_id, "result_version": 1}),
+        ]:
+            assert "Request not found" in failed(await c.call_tool(name, args)), name
+        for status in ("open", None):
+            assert ok(await c.call_tool("list_requests", {"status": status}))["requests"] == []
+
+
+async def test_disabled_user_and_person_jwt_get_401(client):
+    from .helpers import mint_token
+
+    data, token = await agent_token(client)
+    async with get_sessionmaker()() as db:
+        await db.execute(
+            update(User).where(User.id == data["user"]["id"]).values(disabled_at=datetime.now(UTC))
+        )
+        await db.commit()
+    async with mcp_server.running():
+        for raw in (token, mint_token("ana@example.com"), "just-some-string"):
+            r = await client.post(
+                "/mcp", json=INITIALIZE, headers={**MCP_HEADERS, **auth(token=raw)}
+            )
+            assert r.status_code == 401, raw
+            assert "resource_metadata=" in r.headers["www-authenticate"]
+
+
+async def test_publish_page_accepts_utf8_alias_and_wrapped_base64(client):
+    _, token = await agent_token(client)
+    wrapped = base64.encodebytes(PNG + b"\x00" * 100).decode()  # lines of 76 with newlines
+    assert "\n" in wrapped.strip()
+    async with connected(token) as c:
+        published = ok(
+            await c.call_tool(
+                "publish_page",
+                {
+                    "title": "T",
+                    "files": [
+                        {"path": "index.html", "content": "<p>x</p>", "encoding": "utf8"},
+                        {"path": "logo.png", "content": wrapped, "encoding": "base64"},
+                    ],
+                },
+            )
+        )
+        page = ok(await c.call_tool("get_page", {"page_id": published["page_id"]}))
+    logo = next(f for f in page["files"] if f["path"] == "logo.png")
+    assert base64.b64decode(logo["content"]) == PNG + b"\x00" * 100
+
+
+async def test_bad_base64_message_truncates_long_paths(client):
+    _, token = await agent_token(client)
+    long_path = "a" * 150 + ".png"
+    async with connected(token) as c:
+        message = failed(
+            await c.call_tool(
+                "publish_page",
+                {
+                    "title": "T",
+                    "files": [
+                        {"path": "index.html", "content": "<p>x</p>"},
+                        {"path": long_path, "content": "%%%", "encoding": "base64"},
+                    ],
+                },
+            )
+        )
+    assert "invalid base64" in message
+    assert long_path not in message
+
+
+async def test_list_requests_says_when_there_are_more(client, monkeypatch):
+    from app.mcp import tools
+
+    data, token = await agent_token(client)
+    page = (
+        await client.post(
+            "/v1/pages",
+            json={"title": "R", "files": [{"path": "index.html", "content": "<p>r</p>"}]},
+            headers=auth(data),
+        )
+    ).json()["page"]
+    first = await ask(client, data, page["id"], "@agent one")
+    await ask(client, data, page["id"], "@agent two")
+    monkeypatch.setattr(tools, "REQUEST_LIMIT", 1)
+    async with connected(token) as c:
+        result = ok(await c.call_tool("list_requests", {}))
+        assert [r["id"] for r in result["requests"]] == [first]
+        assert result["more"] is True
+        monkeypatch.setattr(tools, "REQUEST_LIMIT", 50)
+        assert ok(await c.call_tool("list_requests", {}))["more"] is False
+
+
+async def test_rate_limited_tool_fails_closed_without_a_request(client, monkeypatch):
+    from app.mcp import tools
+
+    _, token = await agent_token(client)
+    monkeypatch.setattr(tools, "_request", lambda ctx: None)
+    async with connected(token) as c:
+        message = failed(
+            await c.call_tool(
+                "publish_page",
+                {"title": "T", "files": [{"path": "index.html", "content": "<p>x</p>"}]},
+            )
+        )
+        assert "rate limit" in message
+        assert ok(await c.call_tool("list_pages", {}))["pages"] == []
+
+
+async def test_lifespan_cleans_up_even_if_mcp_shutdown_fails(monkeypatch):
+    import pytest
+
+    from app import main
+    from app.services import webhooks as webhooks_service
+
+    @asynccontextmanager
+    async def broken():
+        yield
+        raise RuntimeError("mcp shutdown failed")
+
+    stopped = []
+
+    async def stop():
+        stopped.append(True)
+
+    # Nothing real is started, so the patched stop leaves nothing running behind.
+    monkeypatch.setattr(config.get_settings(), "webhook_worker", False)
+    monkeypatch.setattr(config.get_settings(), "retention_enabled", False)
+    monkeypatch.setattr(mcp_server, "running", broken)
+    monkeypatch.setattr(webhooks_service.worker, "stop", stop)
+    with pytest.raises(RuntimeError):
+        async with main.lifespan(app):
+            pass
+    assert stopped == [True]

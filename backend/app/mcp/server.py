@@ -75,13 +75,12 @@ async def running():
     The library allows one run per session manager, so each run builds a fresh inner app.
     """
     global _inner
-    settings = get_settings()
     inner = server.streamable_http_app(
         streamable_http_path=PATH,
         stateless_http=True,
         json_response=True,
         # Same ceiling the API applies to every request body, so large bundles fit.
-        max_request_body_size=settings.max_bundle_bytes * 2 + 2 * 1024 * 1024,
+        max_request_body_size=get_settings().max_request_bytes,
         # Callers prove who they are with a Bearer token, not by where they connect from, so the
         # localhost-only Host check the library turns on by default does not apply here.
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),

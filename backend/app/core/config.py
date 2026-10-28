@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     smtp_security: str = "starttls"  # starttls, ssl or none
 
     @property
+    def max_request_bytes(self) -> int:
+        """The largest request body accepted: a full bundle base64 encoded, plus room for the
+        other fields. Used by the API middleware and the MCP endpoint."""
+        return self.max_bundle_bytes * 2 + 2 * 1024 * 1024
+
+    @property
     def migration_url(self) -> str:
         return self.database_url_unpooled or self.database_url
 

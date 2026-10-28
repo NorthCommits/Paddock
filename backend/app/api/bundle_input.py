@@ -103,13 +103,17 @@ def _read_manifest(raw: str) -> dict[str, str]:
         ) from None
 
 
+_ASCII_SPACE = {ord(c): None for c in " \t\r\n\f\v"}
+
+
 def decode_file(path: str, content: str, encoding: str = "utf-8") -> IncomingFile:
-    """Turn one {path, content, encoding} item into file bytes. Shared with the MCP tools."""
+    """Turn one {path, content, encoding} item into file bytes. Shared with the MCP tools.
+    Base64 may be wrapped over several lines; the line breaks and spaces are ignored."""
     if encoding == "base64":
         try:
-            data = base64.b64decode(content, validate=True)
+            data = base64.b64decode(content.translate(_ASCII_SPACE), validate=True)
         except (binascii.Error, ValueError):
-            raise AppError(422, "validation_failed", f"{path}: invalid base64") from None
+            raise AppError(422, "validation_failed", f"{path[:60]!r}: invalid base64") from None
     elif encoding in ("utf-8", "utf8"):
         data = content.encode()
     else:

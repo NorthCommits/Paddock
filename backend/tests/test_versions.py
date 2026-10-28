@@ -148,6 +148,21 @@ async def test_base64_files_in_json(client):
     assert response.status_code == 201, response.text
 
 
+async def test_wrapped_base64_is_accepted(client):
+    import base64
+
+    data = await signup(client)
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 200
+    wrapped = base64.encodebytes(png).decode()  # MIME style, a newline every 76 characters
+    body = page_body(
+        files=files(
+            "<img src='p.png'>", [{"path": "p.png", "content": wrapped, "encoding": "base64"}]
+        )
+    )
+    response = await client.post("/v1/pages", json=body, headers=auth(data))
+    assert response.status_code == 201, response.text
+
+
 async def test_oversized_upload_is_refused(client, monkeypatch):
     from app.core import config
 

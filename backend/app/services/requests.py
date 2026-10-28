@@ -127,8 +127,19 @@ async def get_one(db: AsyncSession, actor, request_id: uuid.UUID) -> RequestItem
     request = await db.get(RevisionRequest, request_id)
     if request is None:
         raise AppError(404, "not_found", "Request not found")
-    await get_for_actor(db, actor, request.page_id, "comment.read")
+    await _page_for(db, actor, request, "comment.read")
     return (await _items(db, [request]))[0]
+
+
+async def _page_for(db: AsyncSession, actor, request: RevisionRequest, action: str) -> None:
+    """Check access to the request's page. Someone who cannot see the page hears only that the
+    request was not found, so a request id never reveals that it exists."""
+    try:
+        await get_for_actor(db, actor, request.page_id, action)
+    except AppError as exc:
+        if exc.status == 404:
+            raise AppError(404, "not_found", "Request not found") from None
+        raise
 
 
 async def _load(db: AsyncSession, actor, request_id: uuid.UUID) -> RevisionRequest:
@@ -138,7 +149,7 @@ async def _load(db: AsyncSession, actor, request_id: uuid.UUID) -> RevisionReque
     )
     if request is None:
         raise AppError(404, "not_found", "Request not found")
-    await get_for_actor(db, actor, request.page_id, "request.act")
+    await _page_for(db, actor, request, "request.act")
     if (
         request.status == "claimed"
         and request.claim_expires_at

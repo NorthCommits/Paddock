@@ -7,7 +7,7 @@ The docstrings are what the agent reads to decide when and how to call a tool.
 import base64
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any, Literal
+from typing import Any
 
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.mcpserver import Context
@@ -28,6 +28,9 @@ from app.services import comments, pages, requests, tokens
 from app.services.bundles import TEXT_EXTENSIONS, check_bundle, extension
 from app.services.storage import get_storage
 
+# list_requests returns at most this many, oldest first.
+REQUEST_LIMIT = 50
+
 # get_page stops inlining file contents after this many bytes, so one call cannot flood the
 # agent's context. Files past the budget are listed without content.
 CONTENT_BUDGET = 2 * 1024 * 1024
@@ -39,7 +42,8 @@ class PageFile(BaseModel):
         "Lowercase letters, digits, dots, dashes, underscores and slashes only."
     )
     content: str = Field(description="The file content: plain text, or base64 for binary files.")
-    encoding: Literal["utf-8", "base64"] = Field(
+    # Checked by decode_file, the same rule the REST upload uses ('utf-8', 'utf8' or 'base64').
+    encoding: str = Field(
         default="utf-8", description="'utf-8' for text files, 'base64' for images and fonts."
     )
 
@@ -95,7 +99,10 @@ async def acting_user(ctx: Context | None = None, *, write: bool = False, rule: 
         raise ToolError("Not signed in to Paddock. Reconnect and sign in again.")
     request = _request(ctx)
     try:
-        if rule and request is not None:
+        if rule:
+            if request is None:
+                # Fail closed: a limited action never runs unchecked.
+                raise ToolError("Paddock could not check the rate limit for this call. Try again.")
             ratelimit.limit(rule)(request)
         async with get_sessionmaker()() as db:
             found = await tokens.find(db, access.token)
@@ -173,7 +180,7 @@ async def get_page(page_id: str, ctx: Context | None = None) -> dict:
     content_type, encoding, content}]}.
     """
     pid = _id(page_id, "page_id")
-    async with acting_user(ctx) as (db, actor):
+    async with acting_user(ctx, rule="view") as (db, actor):
         page = await pages.get_for_actor(db, actor, pid, "page.view")
         out = await pages.page_out(db, page, actor.user)
         result = {**_page_summary(out), "entry_path": None, "files": []}
@@ -339,13 +346,19 @@ async def list_requests(status: str | None = "open", ctx: Context | None = None)
             empty for all.
 
     Returns {"requests": [{id, status, page_id, page_title, comment: {body, ...},
-    base_version, ...}]}.
+    base_version, ...}], "more": true when more than 50 match; finish some and list again}.
     """
     if status not in (None, "open", "claimed", "done", "dismissed"):
         raise ToolError("status must be 'open', 'claimed', 'done', 'dismissed', or left empty")
     async with acting_user(ctx) as (db, actor):
-        out = await requests.list_requests(db, actor, status=status, page_id=None, limit=50)
-        return {"requests": [r.model_dump(mode="json") for r in out.items]}
+        out = await requests.list_requests(
+            db, actor, status=status, page_id=None, limit=REQUEST_LIMIT + 1
+        )
+        items = out.items[:REQUEST_LIMIT]
+        return {
+            "requests": [r.model_dump(mode="json") for r in items],
+            "more": len(out.items) > REQUEST_LIMIT,
+        }
 
 
 async def claim_request(request_id: str, minutes: int = 10, ctx: Context | None = None) -> dict:
