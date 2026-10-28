@@ -20,7 +20,10 @@ Design documents are in [`docs/`](docs): [PRD](docs/PRD.md), [Architecture](docs
 | Comments | `GET/POST /v1/pages/{id}/comments`, `PATCH/DELETE /v1/comments/{id}`, `POST /v1/comments/{id}/resolve` |
 | Requests | `GET /v1/requests`, `POST /v1/requests/{id}/claim`, `.../complete`, `.../dismiss` |
 
-An `@agent` mention by a person opens a revision request. An agent token lists requests, claims one, publishes a version and completes it. Real-time streams arrive in milestone 6 (see SDD section 13), so agents poll `GET /v1/requests` for now.
+| Live events | `GET /v1/events` (all your pages), `GET /v1/pages/{id}/events` (one page). Server-sent events, scope `events:read` |
+| Webhooks | `POST/GET /v1/webhooks`, `PATCH/DELETE /v1/webhooks/{id}`, `POST /v1/webhooks/{id}/test`, `GET /v1/webhooks/{id}/deliveries` |
+
+An `@agent` mention by a person opens a revision request. An agent token lists requests, claims one, publishes a version and completes it. An agent can learn about new requests by holding a live stream open or by receiving a webhook, so it does not need to poll.
 
 ## Requirements
 
@@ -70,6 +73,8 @@ Settings come from environment variables or `backend/.env`. Never commit `.env`.
 | `VERIFY_EMAIL_HOURS` | How long a confirmation link works | `24` |
 | `RESET_PASSWORD_MINUTES` | How long a reset link works | `60` |
 | `SESSION_DAYS` | Browser login lifetime | `30` |
+| `WEBHOOK_WORKER` | Run the webhook sender inside the API process. Turn off only if you run no webhooks | `true` |
+| `WEBHOOK_ALLOW_PRIVATE` | Allow webhook addresses on private networks. For testing on your own machine only, never in production | `false` |
 | `LOG_LEVEL` | Logging level | `INFO` |
 
 Generate a strong secret with `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`.
@@ -106,6 +111,70 @@ Paddock sends its own email through any SMTP server. It does not use Neon or any
 Scopes: `pages:read`, `pages:write`, `comments:read`, `comments:write`, `requests:act`, `events:read`.
 
 Tokens cannot create or list other tokens. Only a browser session can manage tokens.
+
+## Live events (server-sent events)
+
+Every change writes an event row in the same transaction. After the commit, open streams receive it at once.
+
+```
+curl -N -H "Authorization: Bearer pdk_your_token" http://localhost:8000/v1/events
+```
+
+- The token needs `events:read`. `/v1/events` covers pages you own and pages shared with you. `/v1/pages/{id}/events` covers one page.
+- Each message has `id`, `event` (the type) and `data` (the envelope below). Reconnect with a `Last-Event-ID` header and the server replays what you missed, up to 1000 events. Beyond that it sends `event: resync`, which means refetch the page data.
+- A `: ping` line arrives every 20 seconds. Access is checked again for every event, so a removed member stops receiving at once. Who joined or left a page (`member.added`, `member.removed`) goes to the owner only.
+- Streams do not hold a database connection while idle.
+
+Envelope: `{"id": 42, "type": "request.created", "page_id": "...", "created_at": "...", "data": {...}}`
+
+| Type | `data` |
+|---|---|
+| `version.published` | `version`, `message`, `by_agent` |
+| `version.rolled_back` | `version`, `restored`, `by_agent` |
+| `page.updated` | the fields that changed (`title`, `slug`, `visibility`) |
+| `page.deleted` | empty |
+| `comment.created` | `comment_id`, `thread_id`, `body`, `by_agent`, `mentions_agent`, `request_id` |
+| `comment.updated` | `comment_id`, `body` |
+| `comment.deleted` | `comment_id` |
+| `comment.resolved` | `comment_id`, `resolved` |
+| `request.created` | `request_id`, `comment_id`, `thread_id`, `body`, `base_version` |
+| `request.claimed` | `request_id`, `expires_at` |
+| `request.reopened` | `request_id` |
+| `request.completed` | `request_id`, `result_version` |
+| `request.dismissed` | `request_id`, `reason` |
+| `member.added`, `member.removed` | `user_id`, `role` or `left` |
+
+## Webhooks
+
+A webhook is an address on your server that Paddock calls for each matching event on pages you own.
+
+1. Register it: `POST /v1/webhooks` with `{"url": "https://example.com/paddock", "event_types": ["request.created"]}`. Leave `event_types` empty for every event. The response includes a `secret` (starts with `whsec_`). It is shown once, so save it.
+2. Try it: `POST /v1/webhooks/{id}/test` sends a `webhook.test` event once and reports what your server answered.
+3. Check your server's answers: `GET /v1/webhooks/{id}/deliveries`.
+
+Each call is a `POST` with a JSON body (the envelope above) and these headers:
+
+| Header | Meaning |
+|---|---|
+| `X-Paddock-Event` | The event type |
+| `X-Paddock-Delivery` | A unique id for this delivery |
+| `X-Paddock-Timestamp` | Unix time in seconds when the call was signed |
+| `X-Paddock-Signature` | `v1=` followed by the hex HMAC-SHA256 of `timestamp + "." + raw body`, keyed with your secret |
+
+Verify it before you trust it, and reject old timestamps (for example older than 5 minutes):
+
+```python
+import hashlib, hmac
+
+def valid(secret: str, timestamp: str, body: bytes, header: str) -> bool:
+    mac = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest("v1=" + mac, header)
+```
+
+- Any `2xx` answer counts as delivered. Anything else, a timeout (10 seconds) or a connection error is retried after 1 minute, 5 minutes, 30 minutes, 2 hours and 6 hours, then marked `failed`. Redirects are not followed.
+- Paddock refuses addresses that point to private or internal networks (loopback, `10.x`, `192.168.x`, link-local and cloud metadata addresses). The check runs when you register and again before every delivery. In production the address must use `https`.
+- You can have up to 10 webhooks. Tokens need `events:read` to manage them.
+- A background worker sends deliveries. It sleeps until a delivery is due, so an idle service does not keep the database awake. If the host stops the service (a free plan that sleeps), pending deliveries are sent when it wakes.
 
 ## Tests and code quality
 

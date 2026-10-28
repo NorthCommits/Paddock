@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.db.models import Comment, Page, PageVersion, RevisionRequest, User
 from app.schemas.comments import AuthorOut, CommentListOut, CommentOut, RequestOut
-from app.services import audit
+from app.services import audit, events
 from app.services.pages import get_for_actor, role_for
 
 # "@agent" as a whole word, in any case. "@agentic" and "name@agent.com" do not count.
@@ -149,6 +149,50 @@ def _token_id(actor) -> uuid.UUID | None:
 # ---------------------------------------------------------------- operations
 
 
+async def request_event(
+    db: AsyncSession, page: Page, request: RevisionRequest, type_: str, comment: Comment
+):
+    """Tell streams and webhooks about a request, with enough to act on it."""
+    await events.emit(
+        db,
+        page.id,
+        type_,
+        {
+            "request_id": str(request.id),
+            "comment_id": str(comment.id),
+            "thread_id": str(comment.parent_id or comment.id),
+            "body": comment.body,
+            "base_version": await _number(db, request.base_version_id),
+        },
+    )
+
+
+async def _number(db: AsyncSession, version_id: uuid.UUID | None) -> int | None:
+    if version_id is None:
+        return None
+    return (await version_numbers(db, {version_id})).get(version_id)
+
+
+async def comment_created(
+    db: AsyncSession, page: Page, comment: Comment, request: RevisionRequest | None, by_agent: bool
+) -> None:
+    await events.emit(
+        db,
+        page.id,
+        "comment.created",
+        {
+            "comment_id": str(comment.id),
+            "thread_id": str(comment.parent_id or comment.id),
+            "body": comment.body,
+            "by_agent": by_agent,
+            "mentions_agent": comment.mentions_agent,
+            "request_id": str(request.id) if request else None,
+        },
+    )
+    if request is not None:
+        await request_event(db, page, request, "request.created", comment)
+
+
 async def create(
     db: AsyncSession,
     actor,
@@ -183,15 +227,17 @@ async def create(
     await db.flush()
     # Only people ask agents for work. An agent mentioning @agent in its own text does not
     # start another request, so agents cannot trigger each other in a loop.
+    request = None
     if comment.mentions_agent and actor.is_person:
-        db.add(
-            RevisionRequest(
-                page_id=page.id,
-                comment_id=comment.id,
-                requested_by=actor.user.id,
-                base_version_id=page.current_version_id,
-            )
+        request = RevisionRequest(
+            page_id=page.id,
+            comment_id=comment.id,
+            requested_by=actor.user.id,
+            base_version_id=page.current_version_id,
         )
+        db.add(request)
+        await db.flush()
+    await comment_created(db, page, comment, request, actor.token is not None)
     audit.record(
         db,
         action="comment.create",
@@ -247,24 +293,35 @@ async def edit(
         wants = mentions_agent(body)
         request = await _request_for(db, comment.id)
         if wants and request is None and comment.author_token_id is None:
-            db.add(
-                RevisionRequest(
-                    page_id=page.id,
-                    comment_id=comment.id,
-                    requested_by=actor.user.id,
-                    base_version_id=page.current_version_id,
-                )
+            request = RevisionRequest(
+                page_id=page.id,
+                comment_id=comment.id,
+                requested_by=actor.user.id,
+                base_version_id=page.current_version_id,
             )
+            db.add(request)
+            await db.flush()
+            await request_event(db, page, request, "request.created", comment)
         elif wants and request is not None and request.status == "dismissed":
             request.status = "open"  # the mention is back, so the request is too
             request.base_version_id = page.current_version_id
             request.dismiss_reason = None
             request.claimed_by_token_id = None
             request.claim_expires_at = None
+            await request_event(db, page, request, "request.created", comment)
         elif not wants and request is not None and request.status == "open":
             request.status = "dismissed"
             request.dismiss_reason = "The mention was removed"
+            await events.emit(
+                db,
+                page.id,
+                "request.dismissed",
+                {"request_id": str(request.id), "reason": request.dismiss_reason},
+            )
         comment.mentions_agent = wants
+        await events.emit(
+            db, page.id, "comment.updated", {"comment_id": str(comment.id), "body": body}
+        )
         audit.record(
             db,
             action="comment.update",
@@ -291,6 +348,13 @@ async def delete(db: AsyncSession, actor, comment_id: uuid.UUID, *, ip: str | No
         request.dismiss_reason = "The comment was deleted"
         request.claimed_by_token_id = None
         request.claim_expires_at = None
+        await events.emit(
+            db,
+            page.id,
+            "request.dismissed",
+            {"request_id": str(request.id), "reason": request.dismiss_reason},
+        )
+    await events.emit(db, page.id, "comment.deleted", {"comment_id": str(comment.id)})
     audit.record(
         db,
         action="comment.delete",
@@ -306,11 +370,14 @@ async def delete(db: AsyncSession, actor, comment_id: uuid.UUID, *, ip: str | No
 async def resolve(
     db: AsyncSession, actor, comment_id: uuid.UUID, *, resolved: bool, ip: str | None
 ) -> CommentOut:
-    comment, _page = await _comment_for(db, actor, comment_id, "comment.create")
+    comment, page = await _comment_for(db, actor, comment_id, "comment.create")
     if comment.parent_id is not None:
         raise AppError(422, "validation_failed", "Resolve the first comment of the thread")
     comment.resolved_at = _now() if resolved else None
     comment.resolved_by = actor.user.id if resolved else None
+    await events.emit(
+        db, page.id, "comment.resolved", {"comment_id": str(comment.id), "resolved": resolved}
+    )
     audit.record(
         db,
         action="comment.resolve" if resolved else "comment.reopen",

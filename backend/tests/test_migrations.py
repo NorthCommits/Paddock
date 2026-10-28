@@ -24,6 +24,9 @@ EXPECTED_TABLES = {
     "version_files",
     "comments",
     "revision_requests",
+    "events",
+    "webhooks",
+    "webhook_deliveries",
     "alembic_version",
 }
 

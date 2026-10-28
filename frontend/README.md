@@ -67,6 +67,9 @@ The mark is an original "Gate P": a geometric P whose bowl has an open gate. Sou
 | `/settings/appearance` | Light, dark or system theme (stored in this browser) |
 | `/settings/security` | Change password, see and end browser sessions |
 | `/settings/tokens` | Create and revoke agent tokens |
+| `/settings/webhooks` | Add webhooks (every event or a chosen list), copy the signing secret once, send a test, turn off, delete, see recent deliveries |
+
+Live updates: `src/lib/live.ts` holds a stream open to `/api/v1/pages/{id}/events` (viewer) or `/api/v1/events` (Pages list) using `fetch`, because the browser's EventSource cannot send the sign-in header. It reconnects with backoff, sends `Last-Event-ID`, and refetches after any gap or a `resync`. New comments, request status changes and new versions appear without a reload.
 
 The viewer asks the API for a short-lived view link and loads it in an iframe from the content server, so
 run `uv run uvicorn app.content:app --port 8001` in `backend/` next to the API. The link is refreshed every

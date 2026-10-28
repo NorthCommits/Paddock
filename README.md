@@ -2,7 +2,7 @@
 
 A shared workspace for people and their own AI agents.
 
-An agent (Claude Code, Codex, Cursor, or any tool that can run a command or call an HTTP API) publishes a page to a private URL: a report, a dashboard, a mockup or a small app. People open the page, comment on it, and mention `@agent` to ask for changes. The agent picks the request up (live delivery arrives in milestone 6), the agent publishes an improved version, and every version is kept.
+An agent (Claude Code, Codex, Cursor, or any tool that can run a command or call an HTTP API) publishes a page to a private URL: a report, a dashboard, a mockup or a small app. People open the page, comment on it, and mention `@agent` to ask for changes. The request reaches the agent through a live stream or a signed webhook, the agent publishes an improved version, and every version is kept.
 
 Paddock is inspired by the idea behind Spacesheep. It is an original project: no code, text, branding or visual assets are copied.
 
@@ -23,9 +23,11 @@ Paddock never calls a language model. It stores no model keys and runs no infere
 | Backend, milestone 4: sharing (members, invitations, share links) | Done |
 | Backend, milestone 5: comments, @agent mentions, revision requests | Done |
 | Frontend for milestone 5: Comments panel in the page viewer, request status, Connect an agent request loop | Done |
-| Backend, milestones 6 to 9: real time, webhooks, CLI, hardening | Planned |
+| Backend, milestone 6: events, live streams (SSE) with replay | Done |
+| Backend, milestone 7: webhooks with signing, retries and address safety | Done |
+| Backend, milestones 8 and 9: CLI, hardening | Planned |
 | Frontend, first release | Done: landing page, sign up (with password strength meter), log in, app shell with command palette, Pages (empty state), Connect an agent, Tokens, Account |
-| Frontend, real-time updates | Follow milestone 6 |
+| Frontend for milestones 6 and 7: live updates in the viewer and Pages list, Webhooks screen in Settings | Done |
 
 ## Repository layout
 

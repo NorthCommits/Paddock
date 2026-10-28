@@ -27,7 +27,7 @@ export function Collab() {
           </h2>
           <p className="mt-4 text-[17px] leading-[26px] text-muted-foreground">
             Leave a note on a page, reply in threads, and mention <span className="font-medium text-foreground">@agent</span> to ask
-            for a change. Your agent picks up the request, publishes a new version and replies in the thread.
+            for a change. The request reaches your agent live, through a stream it holds open or a signed webhook. It publishes a new version and replies in the thread.
           </p>
           <p className="mt-4 text-[13px] text-muted-foreground">Click a line in the page to try it.</p>
         </Reveal>

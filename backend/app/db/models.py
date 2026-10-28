@@ -287,3 +287,60 @@ class RevisionRequest(Base):
         UniqueConstraint("comment_id", name="uq_revision_requests_comment_id"),
         Index("ix_revision_requests_page_id_status", "page_id", "status"),
     )
+
+
+class Event(Base):
+    """An append-only record of something that happened. Streams replay from it."""
+
+    __tablename__ = "events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    page_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE")
+    )  # the owner
+    type: Mapped[str] = mapped_column(String(40))
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (
+        Index("ix_events_user_id_id", "user_id", "id"),
+        Index("ix_events_page_id_id", "page_id", "id"),
+    )
+
+
+class Webhook(Base):
+    """A server address that Paddock calls with each matching event."""
+
+    __tablename__ = "webhooks"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    url: Mapped[str] = mapped_column(Text)
+    secret_enc: Mapped[str] = mapped_column(Text)  # encrypted, the signing secret
+    event_types: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)  # empty means all
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (Index("ix_webhooks_user_id", "user_id"),)
+
+
+class WebhookDelivery(Base):
+    """One event owed to one webhook. The worker sends it and retries on failure."""
+
+    __tablename__ = "webhook_deliveries"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    webhook_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("webhooks.id", ondelete="CASCADE"))
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(String(10), default="pending")  # pending, delivered, failed
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_status_code: Mapped[int | None] = mapped_column(Integer)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (
+        Index("ix_webhook_deliveries_status_next", "status", "next_attempt_at"),
+        Index("ix_webhook_deliveries_webhook_id", "webhook_id"),
+    )

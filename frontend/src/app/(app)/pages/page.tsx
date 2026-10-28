@@ -16,6 +16,7 @@ import { WakeHint } from "@/components/wake-hint";
 import { ROLE_LABEL, api } from "@/lib/api";
 import type { Page, PageList } from "@/lib/api";
 import { ago } from "@/lib/format";
+import { useLive } from "@/lib/live";
 
 const ghosts = [
   { t: "Q3 revenue report", m: "v3 · 2 comments" },
@@ -67,6 +68,10 @@ function Pages() {
   const router = useRouter();
   const params = useSearchParams();
   const { data, error, mutate } = useSWR("pages", () => api<PageList>("/v1/pages?limit=100"));
+  // A new version or a change to any page refreshes the list.
+  useLive("/v1/events", (e) => {
+    if (e === "resync" || /^(version|page|member)\./.test(e.type)) void mutate();
+  });
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<Page | null>(null);
   const [failed, setFailed] = useState("");
