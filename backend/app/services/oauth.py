@@ -61,7 +61,9 @@ def _is_loopback(parts) -> bool:
 def redirect_ok(uri: str) -> bool:
     """Is this a redirect address we are willing to send a person back to?"""
     # urlsplit silently drops tab, CR and LF, so refuse control and space characters first.
-    if any(ord(c) < 0x21 or ord(c) == 0x7F for c in uri):
+    if "#" in uri or any(
+        c.isspace() or ord(c) < 0x21 or ord(c) == 0x7F or 0x80 <= ord(c) <= 0x9F for c in uri
+    ):
         return False
     parts = _split(uri)
     if parts is None or parts.fragment or "@" in parts.netloc:

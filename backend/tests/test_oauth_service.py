@@ -287,16 +287,35 @@ async def test_challenge_with_trailing_newline_is_refused(client):
 
 async def test_malformed_verifier_is_refused(client):
     user = await _user(client)
+    user_id = user.id
     async with get_sessionmaker()() as db:
         app = await _register(db)
         app_id = app.client_id
-        code = await _approve(db, user, app)
         for bad in ("short", "v" * 129, VERIFIER + "\n", "v" * 49 + "!"):
+            # The code carries this verifier's own correct challenge, so only the format can fail.
+            digest = hashlib.sha256(bad.encode()).digest()
+            challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+            code = await _approve(db, user, app, challenge=challenge)
             with pytest.raises(oauth.OAuthError) as err:
                 await _exchange(db, app, code, verifier=bad, client_id=app_id)
             assert err.value.code == "invalid_grant"
+            # The failed exchange rolled back and expired the loaded objects; load them again.
+            user = await db.get(User, user_id)
+            await db.refresh(app)
+        code = await _approve(db, user, app)
         token, _ = await _exchange(db, app, code, client_id=app_id)
     assert token.startswith("pdk_")
+
+
+def test_empty_fragment_and_unicode_whitespace_in_a_redirect_are_refused():
+    for bad in (
+        "http://localhost:5555/cb#",
+        "https://example.com/cb#",
+        "https://example.com/cb\u00a0",
+        "https://example.com/c\u2028b",
+        "https://example.com/c\u0085b",
+    ):
+        assert not oauth.redirect_ok(bad)
 
 
 async def test_token_create_without_commit_waits_for_the_caller(client):
