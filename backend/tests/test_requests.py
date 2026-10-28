@@ -256,3 +256,32 @@ async def test_unknown_request_is_not_found(client):
     token = await agent(client, data)
     missing = "00000000-0000-0000-0000-000000000000"
     assert (await act(client, missing, "claim", token)).status_code == 404
+
+
+async def test_get_one_request(client):
+    data, page_id = await setup(client)
+    rid = await ask(client, data, page_id, "@agent tighten")
+    token = await agent(client, data)
+    r = await client.get(f"/v1/requests/{rid}", headers=auth(token=token))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == rid
+    assert body["page_id"] == page_id
+    assert body["comment"]["body"] == "@agent tighten"
+    assert body["comment"]["thread_id"] == body["comment"]["id"]
+
+    none = await agent(client, data, scopes=("pages:read",))
+    assert (await client.get(f"/v1/requests/{rid}", headers=auth(token=none))).status_code == 403
+    missing = "00000000-0000-0000-0000-000000000000"
+    assert (
+        await client.get(f"/v1/requests/{missing}", headers=auth(token=token))
+    ).status_code == 404
+    async with other() as bo:
+        from .helpers import signup
+        from .test_sharing import BO
+
+        bo_data = await signup(bo, **BO)
+        bo_token = await agent(bo, bo_data)
+        assert (
+            await bo.get(f"/v1/requests/{rid}", headers=auth(token=bo_token))
+        ).status_code == 404

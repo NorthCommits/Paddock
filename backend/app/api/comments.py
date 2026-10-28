@@ -97,6 +97,11 @@ async def list_requests(
     return await requests.list_requests(db, actor, status=status, page_id=page_id, limit=limit)
 
 
+@router.get("/v1/requests/{request_id}", response_model=RequestItemOut)
+async def get_request(request_id: uuid.UUID, db: DbDep, actor: ActorDep):
+    return await requests.get_one(db, actor, request_id)
+
+
 @router.post(
     "/v1/requests/{request_id}/claim",
     response_model=RequestItemOut,
