@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
-import { FileText, KeyRound, LogOut, Moon, Palette as PaletteIcon, PlugZap, Plus, Shield, Sun, Upload, UserRound } from "lucide-react";
+import { FileText, KeyRound, LogOut, Webhook, Moon, Palette as PaletteIcon, PlugZap, Plus, Shield, Sun, Upload, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -74,10 +74,12 @@ export function Palette() {
                 <Row icon={<PaletteIcon />} onSelect={() => go("/settings/appearance")}>Appearance</Row>
                 <Row icon={<Shield />} onSelect={() => go("/settings/security")}>Security</Row>
                 <Row icon={<KeyRound />} onSelect={() => go("/settings/tokens")}>Tokens</Row>
+                <Row icon={<Webhook />} onSelect={() => go("/settings/webhooks")}>Webhooks</Row>
               </Command.Group>
               <Command.Group heading="Actions" className={group}>
                 <Row icon={<Upload />} onSelect={() => go("/pages?new=1")}>Upload a page</Row>
                 <Row icon={<Plus />} onSelect={() => go("/settings/tokens?new=1")}>Create a token</Row>
+                <Row icon={<Plus />} onSelect={() => go("/settings/webhooks?new=1")}>Add a webhook</Row>
                 <Row icon={<Sun />} onSelect={() => { setTheme("light"); setOpen(false); }}>Light theme</Row>
                 <Row icon={<Moon />} onSelect={() => { setTheme("dark"); setOpen(false); }}>Dark theme</Row>
                 <Row icon={<LogOut />} onSelect={signOut}>Sign out</Row>

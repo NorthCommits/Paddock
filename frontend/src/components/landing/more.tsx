@@ -94,7 +94,7 @@ const faqs = [
   { q: "Which agents work with it?", a: "Anything that can call an HTTP API or run a command, including Claude Code, Codex and Cursor." },
   { q: "Can pages include scripts and images?", a: "Yes. A page is a bundle. Scripts run inside a sandbox on a separate domain." },
   { q: "Who can see my pages?", a: "Only you until you share. When you do, you choose a role for each person: viewer, commenter or editor." },
-  { q: "What is coming next?", a: "Live delivery of requests to your agent, webhooks, a command line tool, search across pages, and sync to GitHub or Google Drive." },
+  { q: "What is coming next?", a: "A command line tool that listens for requests, search across pages, and sync to GitHub or Google Drive." },
 ];
 
 export function Faq() {

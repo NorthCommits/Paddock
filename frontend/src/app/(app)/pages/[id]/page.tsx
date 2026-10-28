@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { CommentsPanel } from "@/components/comments-panel";
 import { ShareSheet } from "@/components/share-sheet";
 import { UploadSheet } from "@/components/upload-sheet";
@@ -17,6 +17,7 @@ import { WakeHint } from "@/components/wake-hint";
 import { ApiError, ROLE_LABEL, api, fetchMe } from "@/lib/api";
 import type { Page, Publish, Version, VersionList, ViewUrl } from "@/lib/api";
 import { ago, bytes } from "@/lib/format";
+import { useLive } from "@/lib/live";
 import { cn } from "@/lib/utils";
 import { waitForContent } from "@/lib/warm";
 
@@ -54,6 +55,22 @@ export default function PageViewer() {
   const awake = useSWR(view.data ? "content-awake" : null, waitForContent, {
     revalidateOnFocus: false,
     dedupingInterval: 5 * 60 * 1000,
+  });
+
+  // Changes made by other people or by an agent arrive here at once, so the screen stays current.
+  const { mutate: refetch } = useSWRConfig();
+  useLive(`/v1/pages/${id}/events`, (e) => {
+    const comments = () => refetch((k) => Array.isArray(k) && k[0] === "comments" && k[1] === id);
+    if (e === "resync") {
+      void Promise.all([comments(), page.mutate(), versions.mutate()]);
+      return;
+    }
+    if (e.type.startsWith("comment.") || e.type.startsWith("request.")) void comments();
+    if (e.type === "version.published" || e.type === "version.rolled_back") {
+      void Promise.all([page.mutate(), versions.mutate(), picked === null ? view.mutate() : undefined]);
+      setNotice(`Version ${String(e.data.version)} is live.`);
+    }
+    if (e.type === "page.updated" || e.type === "page.deleted") void page.mutate();
   });
 
   useEffect(() => {

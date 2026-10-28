@@ -176,7 +176,7 @@ async function loadToken(): Promise<string | null> {
 // Several requests start together when a screen opens. They share one token lookup instead of one each.
 let loading: Promise<string | null> | null = null;
 
-async function bearer(): Promise<string | null> {
+export async function bearer(): Promise<string | null> {
   if (cached && cached.expires - 60_000 > Date.now()) return cached.token;
   loading ??= loadToken().finally(() => {
     loading = null;
@@ -250,3 +250,55 @@ export type CommentItem = {
 
 export type Thread = CommentItem & { replies: CommentItem[] };
 export type ThreadList = { items: Thread[] };
+
+export type WebhookRow = { id: string; url: string; event_types: string[]; active: boolean; created_at: string };
+export type WebhookCreated = WebhookRow & { secret: string };
+export type Delivery = {
+  id: string;
+  event_id: number;
+  event_type: string;
+  status: "pending" | "delivered" | "failed";
+  attempts: number;
+  next_attempt_at: string | null;
+  last_status_code: number | null;
+  last_error: string | null;
+  created_at: string;
+};
+
+export const EVENT_GROUPS: { title: string; types: { id: string; label: string }[] }[] = [
+  {
+    title: "Pages",
+    types: [
+      { id: "version.published", label: "A version is published" },
+      { id: "version.rolled_back", label: "A version is restored" },
+      { id: "page.updated", label: "A page is renamed or its visibility changes" },
+      { id: "page.deleted", label: "A page is deleted" },
+    ],
+  },
+  {
+    title: "Comments",
+    types: [
+      { id: "comment.created", label: "A comment or reply is added" },
+      { id: "comment.updated", label: "A comment is edited" },
+      { id: "comment.deleted", label: "A comment is deleted" },
+      { id: "comment.resolved", label: "A thread is resolved or reopened" },
+    ],
+  },
+  {
+    title: "Requests to the agent",
+    types: [
+      { id: "request.created", label: "Someone mentions @agent" },
+      { id: "request.claimed", label: "An agent claims a request" },
+      { id: "request.reopened", label: "A claim runs out" },
+      { id: "request.completed", label: "A request is completed" },
+      { id: "request.dismissed", label: "A request is dismissed" },
+    ],
+  },
+  {
+    title: "Sharing",
+    types: [
+      { id: "member.added", label: "Someone joins a page" },
+      { id: "member.removed", label: "Someone leaves or is removed" },
+    ],
+  },
+];

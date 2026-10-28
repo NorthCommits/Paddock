@@ -9,6 +9,7 @@ const tabs = [
   { href: "/settings/appearance", label: "Appearance" },
   { href: "/settings/security", label: "Security" },
   { href: "/settings/tokens", label: "Tokens" },
+  { href: "/settings/webhooks", label: "Webhooks" },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {

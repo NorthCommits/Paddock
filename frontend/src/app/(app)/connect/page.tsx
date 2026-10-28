@@ -94,7 +94,7 @@ export default function Page() {
         <Step n={4} title="Answer requests" last>
           <p className="mt-1 text-[13px] text-muted-foreground">
             When someone mentions @agent in a comment, Paddock opens a request. The token needs the scopes comments:read and requests:act. Ask for open
-            requests, claim one, publish a new version, then complete it with the version number. A claim lasts 10 minutes unless you claim again.
+            requests, claim one, publish a new version, then complete it with the version number. A claim lasts 10 minutes unless you claim again. To hear about requests the moment they are made, hold a stream open on /api/v1/events (token scope events:read), or add a webhook in Settings.
           </p>
           <div className="mt-3">
             <CopyField label="request loop" value={requestLoop} />
