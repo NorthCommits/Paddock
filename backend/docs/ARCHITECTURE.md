@@ -98,10 +98,10 @@ Pages contain scripts supplied by agents, so they must be treated as untrusted c
 2. **Sandboxed frames.** The frontend embeds pages in an iframe with the `sandbox` attribute (scripts allowed, same-origin not granted for the dashboard).
 3. **Content security policy** on every content response: restrict network access from page scripts by default, block framing by other sites, and disallow plugins. The owner may later opt in to specific external hosts.
 4. **No credentials on the content origin.** Pages are fetched with a short-lived signed URL or view token, never with the dashboard session cookie.
-5. **Token hygiene.** API tokens are random, stored only as hashes, shown once, scoped and revocable. Passwords use Argon2id.
+5. **Token hygiene.** API tokens are random, stored only as hashes, shown once, scoped and revocable. Passwords are handled by Neon Auth and never reach Paddock.
 6. **Upload validation.** Limits on bundle size, file count and path format, plus content-type allow-listing and path traversal protection.
 7. **Authorisation on every query.** Access is checked in a single policy module, not scattered across handlers.
-8. **Abuse controls.** Rate limits per token and per IP on publish, comment and login endpoints. Public link pages carry a no-index header by default.
+8. **Abuse controls.** Rate limits per token and per IP (in process, see `docs/SECURITY.md`), a request body cap, security headers on all responses, and a daily retention job. Public link pages carry a no-index header by default.
 9. **Webhook safety.** Signatures (HMAC) on every delivery, and blocking of private network addresses to prevent server-side request forgery.
 
 ## 7. Request flows

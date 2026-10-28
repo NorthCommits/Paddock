@@ -18,8 +18,7 @@ Design documents are in [`docs/`](docs): [PRD](docs/PRD.md), [Architecture](docs
 | Sharing | `GET/POST /v1/pages/{id}/invites`, `GET/POST /v1/pages/{id}/links`, `GET /v1/pages/{id}/members`, role changes, removal, `POST /v1/invites/{token}/accept`, `GET /v1/shared/{token}` |
 | Viewing | `POST /v1/pages/{id}/view-url`, then open the URL on the content server |
 | Comments | `GET/POST /v1/pages/{id}/comments`, `PATCH/DELETE /v1/comments/{id}`, `POST /v1/comments/{id}/resolve` |
-| Requests | `GET /v1/requests`, `POST /v1/requests/{id}/claim`, `.../complete`, `.../dismiss` |
-
+| Requests | `GET /v1/requests`, `GET /v1/requests/{id}`, `POST /v1/requests/{id}/claim`, `.../complete`, `.../dismiss` |
 | Live events | `GET /v1/events` (all your pages), `GET /v1/pages/{id}/events` (one page). Server-sent events, scope `events:read` |
 | Webhooks | `POST/GET /v1/webhooks`, `PATCH/DELETE /v1/webhooks/{id}`, `POST /v1/webhooks/{id}/test`, `GET /v1/webhooks/{id}/deliveries` |
 
@@ -62,7 +61,10 @@ Settings come from environment variables or `backend/.env`. Never commit `.env`.
 | `ENVIRONMENT` | `development`, `test` or `production`. Production turns on secure cookies | `development` |
 | `APP_ORIGIN` | Address of the frontend, allowed by CORS. The frontend normally reaches the API through its own `/api` proxy | `http://localhost:3000` |
 | `CONTENT_ORIGIN` | Address that will serve published pages | `http://localhost:8001` |
-| `STORAGE_BACKEND` | Where files are kept. Only `local` for now | `local` |
+| `STORAGE_BACKEND` | Where files are kept: `local` or `s3` (any S3 compatible bucket). Use `s3` when hosting | `local` |
+| `S3_BUCKET`, `S3_ENDPOINT_URL`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Bucket details, needed when `STORAGE_BACKEND=s3` | none, region `auto` |
+| `NEON_AUTH_URL` | Neon Auth address. Required in production | none |
+| `NEON_AUTH_EMAIL_VERIFIED` | Set to `true` when Neon requires a verified email before sign in | `false` |
 | `STORAGE_LOCAL_PATH` | Folder for stored files | `storage` |
 | `CONTENT_TOKEN_MINUTES` | Lifetime of a view link | `15` |
 | `EMAIL_BACKEND` | `console` logs emails (development). `smtp` sends them. Must be `smtp` in production | `console` |
@@ -70,11 +72,11 @@ Settings come from environment variables or `backend/.env`. Never commit `.env`.
 | `SMTP_HOST`, `SMTP_PORT` | Your mail server | none, `587` |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Mail server login | none |
 | `SMTP_SECURITY` | `starttls` (port 587), `ssl` (port 465) or `none` | `starttls` |
-| `VERIFY_EMAIL_HOURS` | How long a confirmation link works | `24` |
-| `RESET_PASSWORD_MINUTES` | How long a reset link works | `60` |
-| `SESSION_DAYS` | Browser login lifetime | `30` |
 | `WEBHOOK_WORKER` | Run the webhook sender inside the API process. Turn off only if you run no webhooks | `true` |
 | `WEBHOOK_ALLOW_PRIVATE` | Allow webhook addresses on private networks. For testing on your own machine only, never in production | `false` |
+| `RATE_LIMIT_ENABLED` | Per minute request limits (see below). Turn off only for load tests | `true` |
+| `PROXY_HOPS` | How many proxies add to `X-Forwarded-For` in front of the API. `2` on Render | `0` |
+| `RETENTION_ENABLED` | Run the daily cleanup inside the API process | `true` |
 | `LOG_LEVEL` | Logging level | `INFO` |
 
 Generate a strong secret with `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`.
@@ -166,6 +168,7 @@ Verify it before you trust it, and reject old timestamps (for example older than
 ```python
 import hashlib, hmac
 
+
 def valid(secret: str, timestamp: str, body: bytes, header: str) -> bool:
     mac = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
     return hmac.compare_digest("v1=" + mac, header)
@@ -175,6 +178,48 @@ def valid(secret: str, timestamp: str, body: bytes, header: str) -> bool:
 - Paddock refuses addresses that point to private or internal networks (loopback, `10.x`, `192.168.x`, link-local and cloud metadata addresses). The check runs when you register and again before every delivery. In production the address must use `https`.
 - You can have up to 10 webhooks. Tokens need `events:read` to manage them.
 - A background worker sends deliveries. It sleeps until a delivery is due, so an idle service does not keep the database awake. If the host stops the service (a free plan that sleeps), pending deliveries are sent when it wakes.
+
+## Rate limits and abuse controls
+
+Requests are counted per minute, per sign in token (or per IP address when there is none).
+Going over gives `429` with a `Retry-After` header.
+
+| Rule | Per minute |
+|---|---|
+| Any request with a credential | 600 |
+| Any request without one, per IP | 120 |
+| Publish, new version, restore | 30 |
+| Comments | 60 |
+| Request claim, complete, dismiss | 120 |
+| Tokens, webhooks, invitations, links | 20 |
+| Open a live stream | 30 |
+| View links | 120 |
+
+The counters live in the API process, so run one instance (see `docs/SECURITY.md`). Bodies far
+over the bundle limit are refused with `413` before they are read. Responses carry
+`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Cache-Control: no-store`,
+and HSTS in production.
+
+## Retention
+
+Once a day (first run five minutes after the API starts) a job removes: events and webhook
+delivery history older than 30 days, invitations and share links that ended over 30 days ago,
+pages deleted over 30 days ago, files no version uses for 7 days, and audit entries over a
+year old. Every step is safe to repeat. Run it by hand with:
+
+```
+uv run python -m app.jobs retention
+```
+
+## Command line tool
+
+The `paddock` CLI lives in `../cli`. See its README. It needs one endpoint that agents use
+alongside the others: `GET /v1/requests/{id}`.
+
+## Docker and load test
+
+`Dockerfile` builds one image for both services (see `docs/DEPLOYMENT.md`).
+`scripts/loadtest.py` is a small read only load test.
 
 ## Tests and code quality
 
@@ -207,6 +252,7 @@ app/
   services/   business logic, called by the routes
   main.py     application setup
 migrations/   Alembic migrations
+scripts/      load test
 tests/        automated tests
 docs/         PRD, architecture and design documents
 ```

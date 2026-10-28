@@ -78,6 +78,8 @@ id, user_id, token_id, action, target_type, target_id, metadata (JSON), ip, crea
 
 - Events older than 30 days are deleted by a daily job, except those needed by pending webhook deliveries.
 - Unreferenced blobs (ref_count zero for more than 7 days) are deleted from storage by a daily job.
+- Also removed daily: webhook delivery history over 30 days, ended invitations and share links over 30 days, pages deleted over 30 days ago, audit entries over a year old.
+- Implemented in `app/services/retention.py`. It runs inside the API process, or on demand with `python -m app.jobs retention`. Each step is safe to repeat.
 
 ## 3. Authentication and authorisation
 
@@ -173,6 +175,7 @@ Visibility is a ceiling: `private` is the owner only (members and links stay sto
 | DELETE /v1/comments/{id} | Delete own comment (owner and editors may delete any). |
 | POST /v1/comments/{id}/resolve | Resolve or reopen a thread. |
 | GET /v1/requests | List requests across the actor's pages (filter by status and page). |
+| GET /v1/requests/{id} | Read one request, so an agent can find its page and thread. |
 | POST /v1/requests/{id}/claim | Claim a request for a limited time. |
 | POST /v1/requests/{id}/complete | Mark done with the resulting version number and a reply. |
 | POST /v1/requests/{id}/dismiss | Dismiss with a reason. |
@@ -342,11 +345,13 @@ Command name: `paddock`. Configuration is stored in the user's config directory.
 
 Exit codes: 0 success, 1 general error, 2 usage error, 3 authentication error, 4 conflict.
 
+Implementation notes: the CLI is the `cli` package (Python, `httpx` only). `paddock login` tries the given address and then the address plus `/api`, because the frontend forwards the API under `/api`. Every command accepts `--json`. A page can be named by id or slug. Requests that get `429` are retried twice after the `Retry-After` wait. `watch` reconnects on its own and resumes from the last event id.
+
 ## 10. Configuration
 
 Environment variables (names only; values are never committed):
 
-`DATABASE_URL` (pooled Neon connection), `DATABASE_URL_UNPOOLED` (direct connection, for migrations), `SECRET_KEY`, `APP_ORIGIN`, `CONTENT_ORIGIN`, `STORAGE_BACKEND` (`local` or `s3`), `STORAGE_LOCAL_PATH`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`, `MAX_BUNDLE_BYTES`, `MAX_FILES`, `WEBHOOK_WORKER`, `WEBHOOK_ALLOW_PRIVATE`, `LOG_LEVEL`.
+`DATABASE_URL` (pooled Neon connection), `DATABASE_URL_UNPOOLED` (direct connection, for migrations), `SECRET_KEY`, `APP_ORIGIN`, `CONTENT_ORIGIN`, `STORAGE_BACKEND` (`local` or `s3`), `STORAGE_LOCAL_PATH`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`, `MAX_BUNDLE_BYTES`, `MAX_FILES`, `WEBHOOK_WORKER`, `WEBHOOK_ALLOW_PRIVATE`, `RATE_LIMIT_ENABLED`, `PROXY_HOPS`, `RETENTION_ENABLED`, `LOG_LEVEL`.
 
 Neon note: use the pooled connection for the app and the direct connection for migrations. Connection pool size is kept small to respect free plan limits.
 
@@ -383,7 +388,7 @@ Integration tests run against a temporary Neon branch or a local Postgres, with 
 5. **Collaboration (done):** comments, mention detection, revision requests and state machine.
 6. **Real time (done):** events table, hub, SSE streams, replay.
 7. **Webhooks (done):** outbox, worker, signing, retries.
-8. **CLI:** all commands, packaging, setup guide.
-9. **Hardening:** rate limits, retention jobs, load test, security review, Docker image, deployment guide.
+8. **CLI (done):** all commands, packaging, setup guide. See `cli/README.md`.
+9. **Hardening (done):** rate limits, retention jobs, load test, security review, Docker image, deployment guide. See `docs/SECURITY.md` and `docs/DEPLOYMENT.md`.
 
 Each milestone ends with passing tests and a short demo before the next begins.
