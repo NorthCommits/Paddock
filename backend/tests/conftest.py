@@ -23,6 +23,7 @@ TEST_DB_URL = _start_test_database()
 os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ["DATABASE_URL_UNPOOLED"] = TEST_DB_URL
 os.environ["ENVIRONMENT"] = "test"
+os.environ["RATE_LIMIT_ENABLED"] = "false"  # limits are tested on purpose, not by accident
 os.environ["NEON_AUTH_EMAIL_VERIFIED"] = "false"  # a local .env must not change test results
 os.environ["NEON_AUTH_URL"] = "https://auth.example.test/db/auth"
 os.environ["EMAIL_BACKEND"] = "console"

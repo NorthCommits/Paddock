@@ -119,6 +119,18 @@ async def list_requests(
     return RequestListOut(items=await _items(db, rows))
 
 
+async def get_one(db: AsyncSession, actor, request_id: uuid.UUID) -> RequestItemOut:
+    if not actor.scopes & {"comments:read", "requests:act"}:
+        raise AppError(403, "forbidden", "This needs the comments:read or requests:act scope")
+    await reopen_expired(db)
+    await db.commit()
+    request = await db.get(RevisionRequest, request_id)
+    if request is None:
+        raise AppError(404, "not_found", "Request not found")
+    await get_for_actor(db, actor, request.page_id, "comment.read")
+    return (await _items(db, [request]))[0]
+
+
 async def _load(db: AsyncSession, actor, request_id: uuid.UUID) -> RevisionRequest:
     """Load a request for update and check the person may act on its page."""
     request = await db.scalar(

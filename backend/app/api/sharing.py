@@ -1,8 +1,9 @@
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from app.api.deps import ActorDep, DbDep, PersonDep, VerifiedActorDep, client_ip
+from app.core.ratelimit import limit
 from app.schemas.pages import PageOut, ViewUrlOut
 from app.schemas.sharing import (
     InviteCreatedOut,
@@ -46,7 +47,12 @@ async def remove_member(
     await sharing.remove_member(db, actor, page_id, user_id, client_ip(request))
 
 
-@router.post("/invites", status_code=201, response_model=InviteCreatedOut)
+@router.post(
+    "/invites",
+    status_code=201,
+    response_model=InviteCreatedOut,
+    dependencies=[Depends(limit("manage"))],
+)
 async def create_invite(
     page_id: uuid.UUID, body: InviteIn, request: Request, db: DbDep, actor: VerifiedActorDep
 ):
@@ -67,7 +73,12 @@ async def revoke_invite(
     await sharing.revoke_invite(db, actor, page_id, invite_id, client_ip(request))
 
 
-@router.post("/links", status_code=201, response_model=LinkCreatedOut)
+@router.post(
+    "/links",
+    status_code=201,
+    response_model=LinkCreatedOut,
+    dependencies=[Depends(limit("manage"))],
+)
 async def create_link(
     page_id: uuid.UUID, body: LinkIn, request: Request, db: DbDep, actor: VerifiedActorDep
 ):
@@ -108,7 +119,9 @@ async def shared_page(token: str, db: DbDep):
     return await sharing.shared_page(db, token)
 
 
-@public.post("/shared/{token}/view-url", response_model=ViewUrlOut)
+@public.post(
+    "/shared/{token}/view-url", response_model=ViewUrlOut, dependencies=[Depends(limit("view"))]
+)
 async def shared_view_url(token: str, db: DbDep):
     url, expires = await sharing.shared_view_url(db, token)
     return ViewUrlOut(url=url, expires_at=expires)

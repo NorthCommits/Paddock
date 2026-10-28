@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import neon
 from app.core.errors import AppError
 from app.core.policy import ALL_SCOPES
+from app.core.ratelimit import caller_ip
 from app.db.models import ApiToken, User
 from app.db.session import get_session
 from app.services import accounts, tokens
@@ -29,7 +30,7 @@ class Actor:
 
 
 def client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
+    return caller_ip(request)
 
 
 def _bearer(request: Request) -> str:

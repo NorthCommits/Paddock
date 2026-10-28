@@ -21,10 +21,11 @@ STATUS_CODES = {
 class AppError(Exception):
     """Raise this from services and routes. The handler below turns it into JSON."""
 
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(self, status: int, code: str, message: str, retry_after: int | None = None):
         self.status = status
         self.code = code
         self.message = message
+        self.retry_after = retry_after
         super().__init__(message)
 
 
@@ -33,10 +34,17 @@ def _body(request: Request, code: str, message: str) -> dict:
     return {"error": {"code": code, "message": message, "request_id": request_id}}
 
 
+def error_response(
+    request: Request, status: int, code: str, message: str, retry_after: int | None = None
+) -> JSONResponse:
+    headers = {"Retry-After": str(retry_after)} if retry_after else None
+    return JSONResponse(_body(request, code, message), status_code=status, headers=headers)
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def app_error(request: Request, exc: AppError):
-        return JSONResponse(_body(request, exc.code, exc.message), status_code=exc.status)
+        return error_response(request, exc.status, exc.code, exc.message, exc.retry_after)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException):

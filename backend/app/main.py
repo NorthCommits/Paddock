@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 import uuid
@@ -7,9 +8,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, comments, events, health, pages, sharing, tokens, webhooks
+from app.core import ratelimit
 from app.core.config import get_settings
-from app.core.errors import register_error_handlers
+from app.core.errors import error_response, register_error_handlers
 from app.db.session import get_engine
+from app.services import retention
 from app.services import webhooks as webhooks_service
 
 
@@ -17,9 +20,34 @@ from app.services import webhooks as webhooks_service
 async def lifespan(app: FastAPI):
     if get_settings().webhook_worker:
         webhooks_service.worker.start()
+    cleanup = asyncio.create_task(retention.loop()) if get_settings().retention_enabled else None
     yield
+    if cleanup:
+        cleanup.cancel()
     await webhooks_service.worker.stop()
     await get_engine().dispose()
+
+
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
+
+
+def early_refusal(request: Request, settings):
+    """Turn away oversized bodies and callers who are over their limit before any work is done."""
+    declared = request.headers.get("content-length", "")
+    biggest = settings.max_bundle_bytes * 2 + 2 * 1024 * 1024
+    if declared.isdigit() and int(declared) > biggest:
+        return error_response(request, 413, "payload_too_large", "The request body is too large")
+    wait = ratelimit.general_wait(request)
+    if wait is not None:
+        return error_response(
+            request, 429, "rate_limited", f"Too many requests. Try again in {wait} seconds.", wait
+        )
+    return None
 
 
 def create_app() -> FastAPI:
@@ -41,7 +69,13 @@ def create_app() -> FastAPI:
     async def request_id(request: Request, call_next):
         started = time.perf_counter()
         request.state.request_id = request.headers.get("x-request-id") or uuid.uuid4().hex
-        response = await call_next(request)
+        response = early_refusal(request, settings)
+        if response is None:
+            response = await call_next(request)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        if settings.environment == "production":
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
         took_ms = (time.perf_counter() - started) * 1000
         response.headers["X-Request-ID"] = request.state.request_id
         response.headers["Server-Timing"] = f"app;dur={took_ms:.0f}"

@@ -25,7 +25,8 @@ Paddock never calls a language model. It stores no model keys and runs no infere
 | Frontend for milestone 5: Comments panel in the page viewer, request status, Connect an agent request loop | Done |
 | Backend, milestone 6: events, live streams (SSE) with replay | Done |
 | Backend, milestone 7: webhooks with signing, retries and address safety | Done |
-| Backend, milestones 8 and 9: CLI, hardening | Planned |
+| Backend, milestone 8: `paddock` command line tool (see [cli](cli/README.md)) | Done |
+| Backend, milestone 9: rate limits, retention, security review, Docker image, deployment guide | Done |
 | Frontend, first release | Done: landing page, sign up (with password strength meter), log in, app shell with command palette, Pages (empty state), Connect an agent, Tokens, Account |
 | Frontend for milestones 6 and 7: live updates in the viewer and Pages list, Webhooks screen in Settings | Done |
 
@@ -86,4 +87,4 @@ Tests start a throwaway local Postgres and never touch your Neon database.
 
 ## Security note
 
-Pages published by agents can contain scripts. Paddock is designed to serve them from a separate domain, inside sandboxed frames, with a strict content security policy. See section 6 of [the architecture document](backend/docs/ARCHITECTURE.md). Do not deploy this project publicly before milestone 9 (rate limits and hardening) is finished.
+Pages published by agents can contain scripts. Paddock is designed to serve them from a separate domain, inside sandboxed frames, with a strict content security policy. See section 6 of [the architecture document](backend/docs/ARCHITECTURE.md). The security review is in [backend/docs/SECURITY.md](backend/docs/SECURITY.md) and the deployment steps are in [backend/docs/DEPLOYMENT.md](backend/docs/DEPLOYMENT.md).
