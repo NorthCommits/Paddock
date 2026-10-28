@@ -20,7 +20,7 @@ export function Field({
         aria-describedby={error ? `${id}-err` : hint ? `${id}-hint` : undefined}
         {...props}
         className={cn(
-          "h-10 w-full rounded-md border border-border bg-card px-3 text-[15px] text-foreground placeholder:text-subtle transition-[border-color,box-shadow] duration-[120ms] hover:border-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25 aria-[invalid=true]:border-destructive",
+          "h-10 w-full rounded-md border border-input-border bg-card px-3 text-[15px] text-foreground placeholder:text-subtle transition-[border-color,box-shadow] duration-[120ms] hover:border-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25 aria-[invalid=true]:border-destructive",
           className,
         )}
       />

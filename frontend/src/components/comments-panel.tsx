@@ -323,7 +323,7 @@ function Composer({
             void send();
           }
         }}
-        className="mt-1 w-full resize-none rounded-md border border-border bg-card px-2.5 py-2 text-[13px] text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
+        className="mt-1 w-full resize-none rounded-md border border-input-border bg-card px-2.5 py-2 text-[13px] text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
       />
       <div className="mt-1.5 flex items-center gap-2">
         {hint && <p className="flex-1 text-[11px] text-subtle">{hint}</p>}

@@ -29,3 +29,18 @@ export function passwordStrength(pw: string, extras: string[] = []): Strength {
   else if (level < 4) tip = "Add a few more characters for a strong password.";
   return { level, label: labels[level], tip };
 }
+
+export type Check = { id: string; label: string; ok: boolean };
+
+/** The same rules as above, as a short list the person can tick off. Only the first one is required by the server. */
+export function passwordChecks(pw: string, extras: string[] = []): Check[] {
+  const lower = pw.toLowerCase();
+  const common = COMMON.some((c) => lower.includes(c));
+  const personal = extras.some((e) => e.length >= 3 && lower.includes(e.toLowerCase()));
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter((r) => r.test(pw)).length;
+  return [
+    { id: "len", label: "10 or more characters", ok: pw.length >= 10 },
+    { id: "plain", label: "No common word, name or email", ok: pw.length > 0 && !common && !personal },
+    { id: "mix", label: "A mix of letters, numbers or symbols", ok: classes >= 3 },
+  ];
+}

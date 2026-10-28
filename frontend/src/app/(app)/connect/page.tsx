@@ -21,6 +21,13 @@ const requestLoop = [
   "curl -X POST -H \"Authorization: Bearer $PADDOCK_TOKEN\" -H \"Content-Type: application/json\" \\\n  -d '{\"result_version\": 2, \"reply\": \"Shortened the intro.\"}' \\\n  https://your-paddock-address/api/v1/requests/REQUEST_ID/complete",
 ].join("\n");
 
+const cliSteps = `paddock login
+paddock deploy ./my-report -m "first draft"
+paddock requests --status open
+paddock claim REQUEST_ID
+paddock deploy ./my-report --page my-report -m "revised"
+paddock reply REQUEST_ID -m "Done" --done --version 2`;
+
 function Step({ n, title, children, last }: { n: number; title: string; children: React.ReactNode; last?: boolean }) {
   return (
     <motion.li
@@ -101,6 +108,16 @@ export default function Page() {
           </div>
         </Step>
       </ol>
+
+      <section aria-labelledby="cli" className="mt-10 rounded-xl border border-border bg-card p-5 shadow-card">
+        <h2 id="cli" className="text-[15px] font-semibold text-foreground">Prefer a command line?</h2>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          The paddock tool does the same thing with one command per step. Install it from the cli folder of the project, then:
+        </p>
+        <div className="mt-3">
+          <CopyField label="command line steps" value={cliSteps} />
+        </div>
+      </section>
     </div>
   );
 }

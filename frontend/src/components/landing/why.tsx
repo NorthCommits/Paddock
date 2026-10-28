@@ -7,9 +7,9 @@ const widths = [92, 100, 84, 96, 70, 100, 88, 94, 62, 100, 90, 76, 98, 82, 58];
 
 export function Why() {
   return (
-    <section aria-labelledby="why" className="mx-auto max-w-[1120px] px-6 py-24">
+    <section aria-labelledby="why" className="mx-auto max-w-[1200px] px-6 py-24">
       <Reveal>
-        <p className="text-[13px] font-medium text-primary">Why Paddock</p>
+        <p className="eyebrow text-primary">Why Paddock</p>
         <h2 id="why" className="mt-2 max-w-[20ch] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
           Agents write faster than anyone can read.
         </h2>

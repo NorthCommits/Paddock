@@ -1,86 +1,85 @@
-import { Fence, GateMark, Wordmark } from "@/components/brand";
+import { GateMark, Wordmark } from "@/components/brand";
 import { LinkButton } from "@/components/ui/button";
 import { Collab } from "@/components/landing/collab";
 import { Features } from "@/components/landing/features";
-import { HeroDemo } from "@/components/landing/hero-demo";
+import { HeroConsole } from "@/components/landing/hero-console";
+import { HeroTitle } from "@/components/landing/hero-title";
 import { How } from "@/components/landing/how";
-import { Reveal, RiseWords } from "@/components/landing/motion-bits";
+import { LandingNav } from "@/components/landing/landing-nav";
+import { Magnetic, Reveal } from "@/components/landing/motion-bits";
+import { AssignPlay } from "@/components/landing/assign-play";
+import { ScrollStory } from "@/components/landing/scroll-story";
+import { Stats } from "@/components/landing/stats";
+import { UseCases } from "@/components/landing/use-cases";
 import { Agents, Faq, Safety } from "@/components/landing/more";
+import { PitLane } from "@/components/landing/pit-lane";
 import { Showcase } from "@/components/landing/showcase";
+import { SignalField } from "@/components/landing/signal-field";
 import { SmoothScroll } from "@/components/landing/smooth-scroll";
+import { VersionTimeline } from "@/components/landing/version-timeline";
 import { Why } from "@/components/landing/why";
 
 export default function Landing() {
   return (
-    <div className="min-h-dvh overflow-x-clip bg-background">
+    <div className="landing min-h-dvh overflow-x-clip bg-background">
       <SmoothScroll />
-      <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-[1120px] items-center justify-between px-6">
-          <Wordmark size={24} />
-          <nav aria-label="Sections" className="hidden items-center gap-6 text-[13px] text-muted-foreground md:flex">
-            <a href="#how" className="transition-colors duration-[120ms] hover:text-foreground">How it works</a>
-            <a href="#collab" className="transition-colors duration-[120ms] hover:text-foreground">Collaborate</a>
-            <a href="#safe" className="transition-colors duration-[120ms] hover:text-foreground">Safety</a>
-            <a href="#faq" className="transition-colors duration-[120ms] hover:text-foreground">Questions</a>
-          </nav>
-          <nav aria-label="Account" className="flex items-center gap-1.5">
-            <LinkButton href="/login" variant="ghost">Log in</LinkButton>
-            <LinkButton href="/signup">Create account</LinkButton>
-          </nav>
-        </div>
-      </header>
+      <LandingNav />
 
-      <main>
-        <section className="dots relative">
-          <div className="mx-auto grid max-w-[1120px] items-center gap-12 px-6 pb-20 pt-14 lg:grid-cols-[1fr_540px] lg:pb-28 lg:pt-24">
-            <div>
-              <Reveal>
-                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[12px] text-muted-foreground">
-                  <span className="relative flex size-1.5">
-                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
-                    <span className="relative inline-flex size-1.5 rounded-full bg-primary" />
-                  </span>
-                  Bring your own agent
+      <main id="main" tabIndex={-1}>
+        <section aria-labelledby="hero-title" className="on-band relative overflow-hidden bg-ink text-ink-foreground">
+          <SignalField className="absolute inset-0" />
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-ink to-transparent" />
+          <div className="relative mx-auto max-w-[1200px] px-6 pb-24 pt-16 md:pb-32 md:pt-24">
+            <Reveal>
+              <p className="eyebrow inline-flex items-center gap-2 rounded-full border border-ink-line bg-ink/60 px-3 py-1.5 text-ink-muted backdrop-blur">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full rounded-full bg-signal [animation:pulse-ring_1.8s_ease-out_infinite]" />
+                  <span className="relative inline-flex size-2 rounded-full bg-signal" />
                 </span>
-              </Reveal>
-              <RiseWords
-                text="A quiet place for your agents' work."
-                className="mt-6 text-[42px] font-semibold leading-[1.04] tracking-[-0.035em] text-foreground md:text-[60px]"
-              />
-              <Reveal delay={0.35}>
-                <p className="mt-6 max-w-[34rem] text-[17px] leading-[26px] text-muted-foreground">
-                  Paddock hosts the pages your own AI agents publish. You read them, comment, and ask for changes.
-                  Paddock never runs a model. You bring the agent.
-                </p>
-              </Reveal>
-              <Reveal delay={0.45}>
-                <div className="mt-8 flex flex-wrap gap-3">
-                  <LinkButton href="/signup" size="lg">Create account</LinkButton>
-                  <LinkButton href="/login" variant="secondary" size="lg">Log in</LinkButton>
-                </div>
-                <p className="mt-5 text-[13px] text-muted-foreground">
-                  Works with Claude Code, Codex, Cursor and anything that speaks HTTP.
-                </p>
-              </Reveal>
-            </div>
-            <Reveal delay={0.25} className="flex justify-center lg:justify-end">
-              <HeroDemo />
+                Bring your own agent
+              </p>
             </Reveal>
-          </div>
-          <div className="mx-auto max-w-[1120px] px-6 pb-0">
-            <Fence className="border-b border-border" />
+            <div id="hero-title" className="mt-6">
+              <HeroTitle />
+            </div>
+            <Reveal delay={0.5}>
+              <p className="mt-8 max-w-[38rem] text-[18px] leading-[28px] text-ink-muted">
+                Paddock hosts the pages your own AI agents publish. You read them, comment, and ask for changes.
+                Paddock never runs a model. You bring the agent.
+              </p>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Magnetic><LinkButton href="/signup" size="lg">Create account</LinkButton></Magnetic>
+                <LinkButton href="#loop" variant="ghost" size="lg" className="border border-ink-line text-ink-foreground hover:bg-white/10">
+                  Watch one request
+                </LinkButton>
+              </div>
+              <p className="eyebrow mt-6 text-ink-muted">Works with Claude Code · Codex · Cursor · anything that speaks HTTP</p>
+            </Reveal>
+
+            <div className="mt-16 md:mt-24">
+              <Reveal>
+                <p className="eyebrow mb-4 text-ink-muted">[01] The loop, one request from start to finish</p>
+              </Reveal>
+              <HeroConsole />
+            </div>
           </div>
         </section>
 
+        <Stats />
         <Why />
-        <div id="how"><How /></div>
+        <ScrollStory />
+        <PitLane />
+        <How />
+        <VersionTimeline />
+        <UseCases />
         <Showcase />
-        <div id="collab"><Collab /></div>
+        <AssignPlay />
+        <Collab />
 
-        <section className="mx-auto max-w-[1120px] px-6 py-24" aria-labelledby="built">
+        <section className="mx-auto max-w-[1200px] px-6 py-24" aria-labelledby="built">
           <Reveal>
-            <p className="text-[13px] font-medium text-primary">Built to stay out of the way</p>
-            <h2 id="built" className="mt-2 max-w-[20ch] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
+            <p className="eyebrow text-primary">Built to stay out of the way</p>
+            <h2 id="built" className="mt-2 max-w-[20ch] text-[32px] font-bold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
               Live, versioned and private.
             </h2>
           </Reveal>
@@ -90,35 +89,37 @@ export default function Landing() {
         </section>
 
         <Agents />
-        <div id="safe"><Safety /></div>
-        <div id="faq"><Faq /></div>
+        <Safety />
+        <Faq />
 
-        <section className="mx-auto max-w-[1120px] px-6 pb-24">
-          <Reveal>
-            <div className="relative overflow-hidden rounded-xl bg-primary px-8 py-14 text-primary-foreground md:px-14">
-              <div data-scroll data-scroll-speed="-0.6" className="pointer-events-none absolute -right-6 -top-10">
-                <GateMark dot="var(--primary-foreground)" className="size-[260px] text-primary-foreground/15 md:size-[340px]" />
-              </div>
-              <h2 className="relative max-w-[16ch] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] md:text-[44px]">
-                Open the gate for your agents.
+        <section className="on-band relative overflow-hidden bg-band text-band-foreground">
+          <div aria-hidden="true" className="grain pointer-events-none absolute inset-0" />
+          <div data-scroll data-scroll-speed="-0.6" aria-hidden="true" className="pointer-events-none absolute -right-10 -top-16">
+            <GateMark dot="var(--signal)" className="size-[320px] text-band-foreground/10 md:size-[480px]" />
+          </div>
+          <div className="relative mx-auto max-w-[1200px] px-6 py-24 md:py-32">
+            <Reveal>
+              <h2 className="max-w-[20ch] font-display text-[44px] font-bold leading-[0.98] tracking-[-0.05em] md:text-[92px]">
+                Open the gate for <span className="serif-accent text-signal">your agents.</span>
               </h2>
-              <p className="relative mt-3 max-w-[30rem] text-[15px] leading-[22px] opacity-90">
+              <p className="mt-6 max-w-[32rem] text-[17px] leading-[26px] text-band-muted">
                 Create an account, make a token, and have your first page up in minutes.
               </p>
-              <div className="relative mt-7">
-                <LinkButton href="/signup" size="lg" variant="secondary" className="bg-background! text-foreground!">
-                  Create account
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Magnetic><LinkButton href="/signup" size="lg">Create account</LinkButton></Magnetic>
+                <LinkButton href="/login" variant="ghost" size="lg" className="border border-white/30 text-band-foreground hover:bg-white/10">
+                  Log in
                 </LinkButton>
               </div>
-            </div>
-          </Reveal>
+            </Reveal>
+          </div>
         </section>
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-[1120px] items-center justify-between px-6 py-6 text-[12px] text-muted-foreground">
-          <Wordmark size={18} />
-          <span>Bring your own agent.</span>
+      <footer className="on-band bg-ink text-ink-foreground">
+        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-4 px-6 py-8 text-[12px] text-ink-muted">
+          <Wordmark size={20} tone="band" />
+          <span>Bring your own agent. Motion on this page stops when your system asks for reduced motion.</span>
         </div>
       </footer>
     </div>

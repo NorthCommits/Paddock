@@ -58,7 +58,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const sidebar = (
     <nav aria-label="Main" className="flex h-full flex-col gap-0.5 p-3">
       <Link href="/pages" className="mb-4 w-fit px-2 pt-1" aria-label="Paddock home">
-        <Wordmark />
+        <Wordmark tone="band" />
       </Link>
       <LayoutGroup id="nav">
         {nav.map(({ href, label, icon: Icon }) => {
@@ -70,17 +70,17 @@ export function Shell({ children }: { children: ReactNode }) {
               aria-current={active ? "page" : undefined}
               className={cn(
                 "relative flex h-8 items-center gap-2 rounded-md px-2 text-[13px] transition-colors duration-[120ms]",
-                active ? "font-medium text-foreground" : "text-muted-foreground hover:bg-border/50 hover:text-foreground",
+                active ? "font-semibold text-band-foreground" : "text-band-muted hover:bg-white/10 hover:text-band-foreground",
               )}
             >
               {active && (
                 <motion.span
                   layoutId="nav-active"
-                  className="absolute inset-0 rounded-md bg-card shadow-card"
+                  className="absolute inset-0 rounded-md bg-white/12 ring-1 ring-white/15"
                   transition={{ type: "spring", stiffness: 500, damping: 40 }}
                 />
               )}
-              <Icon size={16} aria-hidden="true" className={cn("relative", active && "text-primary")} />
+              <Icon size={16} aria-hidden="true" className={cn("relative", active ? "text-signal" : "text-band-muted")} />
               <span className="relative">{label}</span>
             </Link>
           );
@@ -89,15 +89,15 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="mt-auto">
         {me ? (
           <Menu_.Root>
-            <Menu_.Trigger className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left outline-none transition-colors duration-[120ms] hover:bg-border/50 focus-visible:ring-[3px] focus-visible:ring-primary/25 data-[state=open]:bg-border/50">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary-soft text-[12px] font-semibold text-primary">
+            <Menu_.Trigger className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left outline-none transition-colors duration-[120ms] hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-band-foreground data-[state=open]:bg-white/10">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-signal text-[12px] font-bold text-signal-foreground">
                 {initial}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium text-foreground">{me.user.display_name}</span>
-                <span className="block truncate text-[12px] text-muted-foreground">@{me.user.handle}</span>
+                <span className="block truncate text-[13px] font-medium text-band-foreground">{me.user.display_name}</span>
+                <span className="block truncate text-[12px] text-band-muted">@{me.user.handle}</span>
               </span>
-              <ChevronsUpDown size={14} aria-hidden="true" className="shrink-0 text-subtle" />
+              <ChevronsUpDown size={14} aria-hidden="true" className="shrink-0 text-band-muted" />
             </Menu_.Trigger>
             <Menu_.Portal>
               <Menu_.Content
@@ -136,7 +136,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </Menu_.Portal>
           </Menu_.Root>
         ) : (
-          <Skeleton className="m-2 h-8 w-32" />
+          <Skeleton className="m-2 h-8 w-32 bg-white/20" />
         )}
       </div>
     </nav>
@@ -144,7 +144,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh bg-muted">
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 border-r border-border bg-background/70 backdrop-blur-xl md:block">
+      <aside className="on-band sticky top-0 hidden h-dvh w-60 shrink-0 bg-band text-band-foreground md:block">
         {sidebar}
       </aside>
       <AnimatePresence>
@@ -157,7 +157,7 @@ export function Shell({ children }: { children: ReactNode }) {
             onClick={() => setOpen(false)}
           >
             <motion.div
-              className="h-full w-60 border-r border-border bg-background"
+              className="on-band h-full w-60 bg-band text-band-foreground"
               initial={{ x: -240 }}
               animate={{ x: 0 }}
               exit={{ x: -240 }}
@@ -172,7 +172,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className={cn("min-w-0 flex-1", wide && "flex h-dvh flex-col")}>
         <header className="sticky top-0 z-20 flex h-12 items-center gap-2 border-b border-border bg-background/70 px-4 backdrop-blur-xl">
           <button
-            className="-ml-2 flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-border/50 md:hidden"
+            className="-ml-2 flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-border md:hidden"
             aria-label="Open navigation"
             onClick={() => setOpen(true)}
           >
@@ -199,7 +199,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </LinkButton>
           </div>
         )}
-        <main className={wide ? "min-h-0 w-full flex-1" : "mx-auto w-full max-w-[960px] px-6 py-8"}>{children}</main>
+        <main id="main" tabIndex={-1} className={wide ? "min-h-0 w-full flex-1" : "mx-auto w-full max-w-[960px] px-6 py-8"}>{children}</main>
       </div>
       <Palette />
     </div>

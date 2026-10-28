@@ -69,23 +69,24 @@ export function How() {
   useMotionValueEvent(scrollYProgress, "change", (v) => setActive(Math.min(2, Math.floor(v * 3 * 0.999))));
 
   return (
-    <section aria-labelledby="how" className="bg-muted">
-      <div className="mx-auto max-w-[1120px] px-6 pt-24">
+    <section id="how" aria-labelledby="how-title" className="bg-muted">
+      <div className="mx-auto max-w-[1200px] px-6 pt-24">
         <Reveal>
-          <p className="text-[13px] font-medium text-primary">How it works</p>
-          <h2 id="how" className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
+          <p className="eyebrow text-primary">How it works</p>
+          <h2 id="how-title" className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
             One loop, three moves.
           </h2>
         </Reveal>
       </div>
 
       {/* Desktop: pinned while you scroll through the steps */}
-      <div ref={ref} className="relative mx-auto hidden max-w-[1120px] px-6 md:block" style={{ height: "230vh" }}>
+      <div ref={ref} className="relative mx-auto hidden max-w-[1200px] px-6 md:block" style={{ height: "230vh" }}>
         <div className="sticky top-0 grid h-screen grid-cols-[1fr_420px] items-center gap-16">
           <ol className="space-y-3">
             {steps.map((s, i) => (
               <li key={s.title}>
                 <button
+                  aria-current={i === active ? "step" : undefined}
                   onClick={() => {
                     const el = ref.current;
                     if (!el) return;
@@ -94,7 +95,7 @@ export function How() {
                   }}
                   className={cn(
                     "w-full rounded-xl border p-5 text-left transition-[background-color,border-color,opacity] duration-300",
-                    i === active ? "border-border bg-card shadow-card" : "border-transparent opacity-50 hover:opacity-80",
+                    i === active ? "border-border bg-card shadow-card" : "border-transparent hover:bg-card/70",
                   )}
                 >
                   <span className="flex items-center gap-3">
@@ -126,7 +127,7 @@ export function How() {
       </div>
 
       {/* Mobile: plain stacked steps */}
-      <div className="mx-auto max-w-[1120px] space-y-10 px-6 pb-20 pt-10 md:hidden">
+      <div className="mx-auto max-w-[1200px] space-y-10 px-6 pb-20 pt-10 md:hidden">
         {steps.map((s, i) => (
           <Reveal key={s.title}>
             <div className="flex items-center gap-3">

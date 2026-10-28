@@ -18,11 +18,11 @@ export function Collab() {
   const [likes, setLikes] = useState({ up: 4, heart: 2, mineUp: false, mineHeart: false });
 
   return (
-    <section aria-labelledby="collab" className="bg-muted">
-      <div className="mx-auto grid max-w-[1120px] items-center gap-12 px-6 py-24 md:grid-cols-[420px_1fr] md:gap-20">
+    <section id="collab" aria-labelledby="collab-title" className="bg-muted">
+      <div className="mx-auto grid max-w-[1200px] items-center gap-12 px-6 py-24 md:grid-cols-[420px_1fr] md:gap-20">
         <Reveal className="min-w-0">
-          <p className="text-[13px] font-medium text-primary">Collaborate</p>
-          <h2 id="collab" className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
+          <p className="eyebrow text-primary">Collaborate</p>
+          <h2 id="collab-title" className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-foreground md:text-[44px]">
             Comment, then mention your agent.
           </h2>
           <p className="mt-4 text-[17px] leading-[26px] text-muted-foreground">

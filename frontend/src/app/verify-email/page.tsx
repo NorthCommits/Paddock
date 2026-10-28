@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/input";
+import { OtpInput } from "@/components/otp-input";
 import { authClient } from "@/lib/auth/client";
 import { authMessage, carryQuery, resetSessionCache, safeNext } from "@/lib/auth/session";
 
@@ -66,16 +66,8 @@ function Verify() {
         your address.
       </p>
       <form onSubmit={submit} className="mt-7 flex flex-col gap-4" noValidate>
-        <Field
-          id="code"
-          label="Code"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={8}
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\s/g, ""))}
-          hint="No email after a minute? Check spam, then ask for a new code."
-        />
+        <OtpInput id="code" onChange={setCode} />
+        <p className="-mt-2 text-[12px] text-muted-foreground">No email after a minute? Check spam, then ask for a new code.</p>
         {error && (
           <p role="alert" className="rounded-md bg-muted px-3 py-2 text-[13px] text-destructive">
             {error}

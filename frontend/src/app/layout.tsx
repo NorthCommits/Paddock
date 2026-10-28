@@ -1,4 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import "@fontsource-variable/sora";
+import "@fontsource-variable/jetbrains-mono";
+import "@fontsource/instrument-serif";
 import { Warm } from "@/components/warm";
 import "./globals.css";
 
@@ -17,8 +20,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: "light dark",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#1c1c1e" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f3ee" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1115" },
   ],
 };
 
@@ -34,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-sans">
+        <nav aria-label="Skip links"><a href="#main" className="skip-link">Skip to content</a></nav>
         <Warm />
         {children}
       </body>

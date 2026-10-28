@@ -29,7 +29,7 @@ export default function SharedPage() {
 
   if (info.error) {
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
+      <main id="main" className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
         <Wordmark size={22} />
         <h1 className="mt-8 text-[22px] font-semibold tracking-[-0.02em] text-foreground">This link does not work</h1>
         <p className="mt-2 max-w-[40ch] text-[14px] text-muted-foreground">

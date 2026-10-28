@@ -1,65 +1,114 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Design tokens: see docs/DESIGN.md section 4. Names follow shadcn semantics. */
+/*
+  Design tokens. Colour follows the 60-30-10 rule:
+    60%  neutral surfaces   paper (light) or ink (dark)
+    30%  indigo             structure: links, selection, focus, bands, the logo
+    10%  ember              the one thing to press or watch: main buttons and live signals
+  Every text and background pair is checked by `npm run check:contrast` (WCAG AA).
+  Ember is never used as text on paper (2.5:1). It is a fill with dark text on it.
+*/
 :root {
-  --background: #fbfaf6;
-  --foreground: #1d1d1b;
+  --background: #f5f3ee;
+  --foreground: #0f1115;
   --card: #ffffff;
-  --muted: #f1efe8;
-  --muted-foreground: #66655e;
-  --subtle: #6c6b63;
-  --border: rgba(40, 36, 20, 0.12);
-  --primary: #2b7a4b;
-  --primary-hover: #256a41;
+  --muted: #ece9e1;
+  --muted-foreground: #565a66;
+  --subtle: #5f6370;
+  --border: rgba(15, 17, 21, 0.14);
+  --input-border: #7c808c;
+  --primary: #3b33c9;
+  --primary-hover: #2f28a8;
   --primary-foreground: #ffffff;
-  --primary-soft: #e4f0e8;
-  --destructive: #d70015;
-  --warning: #b25000;
-  --ring: #2b7a4b;
-  --shadow-float: 0 12px 40px rgba(30, 40, 20, 0.14), 0 0 0 0.5px rgba(30, 30, 20, 0.1);
-  --shadow-card: 0 1px 2px rgba(30, 30, 20, 0.06), 0 8px 24px rgba(30, 40, 20, 0.06);
+  --primary-soft: #e6e4fa;
+  --ink: #0f1115;
+  --ink-card: #181b22;
+  --ink-foreground: #f5f3ee;
+  --ink-muted: #a3a7b3;
+  --ink-line: rgba(245, 243, 238, 0.14);
+  --ink-accent: #a79bff;
+  --signal: #ff6b4a;
+  --signal-hover: #ff8265;
+  --signal-foreground: #0f1115;
+  --band: #1e1b5e;
+  --band-foreground: #f5f3ee;
+  --band-muted: #cfcdf0;
+  --destructive: #c4122f;
+  --destructive-foreground: #ffffff;
+  --warning: #8a4b00;
+  --ring: #3b33c9;
+  --shadow-float: 0 12px 40px rgba(15, 17, 40, 0.16), 0 0 0 0.5px rgba(15, 17, 40, 0.12);
+  --shadow-card: 0 1px 2px rgba(15, 17, 40, 0.06), 0 8px 24px rgba(15, 17, 40, 0.06);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-  --background: #161715;
-  --foreground: #f3f2ec;
-  --card: #222421;
-  --muted: #0f100e;
-  --muted-foreground: #a6a59c;
-  --subtle: #939289;
-  --border: rgba(255, 255, 240, 0.13);
-  --primary: #5fbf85;
-  --primary-hover: #74cc96;
-  --primary-foreground: #0b2415;
-  --primary-soft: #1e3326;
-  --destructive: #ff453a;
-  --warning: #ff9f0a;
-  --ring: #5fbf85;
-  --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 240, 0.1);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
-  color-scheme: dark;
+    --background: #0f1115;
+    --foreground: #f5f3ee;
+    --card: #181b22;
+    --muted: #0b0d10;
+    --muted-foreground: #a3a7b3;
+    --subtle: #8e93a0;
+    --border: rgba(245, 243, 238, 0.14);
+    --input-border: #7c808c;
+    --primary: #a79bff;
+    --primary-hover: #bdb4ff;
+    --primary-foreground: #0f1115;
+    --primary-soft: #25225f;
+    --ink: #0f1115;
+  --ink-card: #181b22;
+  --ink-foreground: #f5f3ee;
+  --ink-muted: #a3a7b3;
+  --ink-line: rgba(245, 243, 238, 0.14);
+  --ink-accent: #a79bff;
+  --signal: #ff6b4a;
+    --signal-hover: #ff8265;
+    --signal-foreground: #0f1115;
+    --band: #2d2a8c;
+    --band-foreground: #f5f3ee;
+    --band-muted: #d5d3f5;
+    --destructive: #ff7a85;
+    --destructive-foreground: #0f1115;
+    --warning: #ffb347;
+    --ring: #a79bff;
+    --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(245, 243, 238, 0.1);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --background: #161715;
-  --foreground: #f3f2ec;
-  --card: #222421;
-  --muted: #0f100e;
-  --muted-foreground: #a6a59c;
-  --subtle: #939289;
-  --border: rgba(255, 255, 240, 0.13);
-  --primary: #5fbf85;
-  --primary-hover: #74cc96;
-  --primary-foreground: #0b2415;
-  --primary-soft: #1e3326;
-  --destructive: #ff453a;
-  --warning: #ff9f0a;
-  --ring: #5fbf85;
-  --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 240, 0.1);
+  --background: #0f1115;
+  --foreground: #f5f3ee;
+  --card: #181b22;
+  --muted: #0b0d10;
+  --muted-foreground: #a3a7b3;
+  --subtle: #8e93a0;
+  --border: rgba(245, 243, 238, 0.14);
+  --input-border: #7c808c;
+  --primary: #a79bff;
+  --primary-hover: #bdb4ff;
+  --primary-foreground: #0f1115;
+  --primary-soft: #25225f;
+  --ink: #0f1115;
+  --ink-card: #181b22;
+  --ink-foreground: #f5f3ee;
+  --ink-muted: #a3a7b3;
+  --ink-line: rgba(245, 243, 238, 0.14);
+  --ink-accent: #a79bff;
+  --signal: #ff6b4a;
+  --signal-hover: #ff8265;
+  --signal-foreground: #0f1115;
+  --band: #2d2a8c;
+  --band-foreground: #f5f3ee;
+  --band-muted: #d5d3f5;
+  --destructive: #ff7a85;
+  --destructive-foreground: #0f1115;
+  --warning: #ffb347;
+  --ring: #a79bff;
+  --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(245, 243, 238, 0.1);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
   color-scheme: dark;
 }
@@ -76,6 +125,20 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-soft: var(--primary-soft);
+  --color-ink: var(--ink);
+  --color-ink-card: var(--ink-card);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-line: var(--ink-line);
+  --color-ink-accent: var(--ink-accent);
+  --color-signal: var(--signal);
+  --color-signal-hover: var(--signal-hover);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-band: var(--band);
+  --color-band-foreground: var(--band-foreground);
+  --color-band-muted: var(--band-muted);
+  --color-input-border: var(--input-border);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive: var(--destructive);
   --color-warning: var(--warning);
   --color-ring: var(--ring);
@@ -85,7 +148,9 @@
   --radius-xl: 20px;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui,
     "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display: "Sora Variable", "Sora", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --shadow-float: var(--shadow-float);
   --shadow-card: var(--shadow-card);
 }
@@ -111,6 +176,55 @@ body {
   outline-offset: 2px;
 }
 
+/* On an indigo or ink band the normal ring would vanish, so use paper there. */
+.on-band :focus-visible { outline-color: var(--band-foreground); }
+
+/* Skip link: first thing a keyboard user reaches. */
+.skip-link {
+  position: fixed;
+  left: 12px;
+  top: -64px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--signal);
+  color: var(--signal-foreground);
+  font-weight: 600;
+  transition: top 120ms;
+}
+.skip-link:focus { top: 12px; }
+
+/* Landing headings use the display face. */
+.landing h1, .landing h2, .landing h3 { font-family: var(--font-display); }
+.serif-accent { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: -0.01em; }
+
+/* Small uppercase label in the mono face, used for section tags and signals. */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Fine film grain over dark bands so flat colour does not look like a template. */
+.grain::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes pulse-ring { 0% { transform: scale(0.8); opacity: 0.7; } 100% { transform: scale(2.4); opacity: 0; } }
+
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid Highlight; }
+}
+
 button, a, [role="button"], label[for], summary { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 
@@ -126,5 +240,13 @@ button:disabled { cursor: not-allowed; }
 .skeleton { background: var(--border); border-radius: 6px; animation: shimmer 1.6s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }
+
+@keyframes cell { 0%, 100% { opacity: 0.06; } 45%, 55% { opacity: 0.42; } }
+@keyframes drift { from { transform: translateY(0); } to { transform: translateY(-28px); } }
