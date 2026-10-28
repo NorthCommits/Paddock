@@ -8,6 +8,7 @@ from app.api.bundle_input import read_bundle_request
 from app.api.deps import ActorDep, DbDep, VerifiedActorDep, client_ip, require_scope
 from app.core.config import get_settings
 from app.core.errors import AppError
+from app.core.ratelimit import limit
 from app.schemas.pages import (
     PageFields,
     PageListOut,
@@ -35,7 +36,9 @@ def _validated[T: BaseModel](model: type[T], fields: dict) -> T:
         raise AppError(422, "validation_failed", f"{where}: {first['msg']}") from None
 
 
-@router.post("", status_code=201, response_model=PublishOut)
+@router.post(
+    "", status_code=201, response_model=PublishOut, dependencies=[Depends(limit("publish"))]
+)
 async def create_page(request: Request, db: DbDep, actor: VerifiedActorDep):
     """Create a page and its first version. Send multipart/form-data or JSON (see bundle_input)."""
     upload = await read_bundle_request(request)
@@ -98,7 +101,9 @@ async def delete_page(page_id: uuid.UUID, request: Request, db: DbDep, actor: Ac
     return Response(status_code=204)
 
 
-@router.post("/{page_id}/versions", response_model=PublishOut)
+@router.post(
+    "/{page_id}/versions", response_model=PublishOut, dependencies=[Depends(limit("publish"))]
+)
 async def publish_version(
     page_id: uuid.UUID, request: Request, response: Response, db: DbDep, actor: VerifiedActorDep
 ):
@@ -145,7 +150,11 @@ async def get_version(page_id: uuid.UUID, number: int, db: DbDep, actor: ActorDe
     return await pages.version_detail(db, version)
 
 
-@router.post("/{page_id}/versions/{number}/rollback", response_model=PublishOut)
+@router.post(
+    "/{page_id}/versions/{number}/rollback",
+    response_model=PublishOut,
+    dependencies=[Depends(limit("publish"))],
+)
 async def rollback_version(
     page_id: uuid.UUID,
     number: int,
@@ -163,7 +172,9 @@ async def rollback_version(
     )
 
 
-@router.post("/{page_id}/view-url", response_model=ViewUrlOut)
+@router.post(
+    "/{page_id}/view-url", response_model=ViewUrlOut, dependencies=[Depends(limit("view"))]
+)
 async def view_url(page_id: uuid.UUID, db: DbDep, actor: ActorDep, body: ViewUrlIn | None = None):
     """A short-lived link to the page on the content origin."""
     url, expires = await pages.view_url(db, actor, page_id, body.version if body else None)

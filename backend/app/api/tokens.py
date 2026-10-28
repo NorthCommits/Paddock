@@ -1,15 +1,18 @@
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from app.api.deps import DbDep, PersonDep, VerifiedPersonDep, client_ip
+from app.core.ratelimit import limit
 from app.schemas.auth import TokenCreatedOut, TokenCreateIn, TokenOut
 from app.services import tokens
 
 router = APIRouter(prefix="/v1/tokens", tags=["tokens"])
 
 
-@router.post("", status_code=201, response_model=TokenCreatedOut)
+@router.post(
+    "", status_code=201, response_model=TokenCreatedOut, dependencies=[Depends(limit("manage"))]
+)
 async def create_token(body: TokenCreateIn, request: Request, db: DbDep, actor: VerifiedPersonDep):
     token, raw = await tokens.create(
         db,

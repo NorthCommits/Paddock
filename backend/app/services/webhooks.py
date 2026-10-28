@@ -80,8 +80,10 @@ async def addresses(host: str) -> list[str]:
     return sorted({info[4][0] for info in infos})
 
 
-async def check_url(url: str) -> str:
-    """Refuse anything that could reach Paddock's own network (server-side request forgery)."""
+async def check_url(url: str) -> tuple[str, list[str]]:
+    """Refuse anything that could reach Paddock's own network (server-side request forgery).
+
+    Returns the cleaned address and the public IP addresses the host name points to."""
     parts = urlparse(url.strip())
     production = get_settings().environment == "production"
     if parts.scheme not in ("http", "https") or not parts.hostname:
@@ -95,7 +97,7 @@ async def check_url(url: str) -> str:
             422, "validation_failed", "Leave the user name and password out of the address"
         )
     if get_settings().webhook_allow_private:
-        return url.strip()
+        return url.strip(), []
     found = await addresses(parts.hostname)
     if not found:
         raise AppError(422, "validation_failed", "Paddock cannot find that host name")
@@ -104,7 +106,21 @@ async def check_url(url: str) -> str:
             raise AppError(
                 422, "validation_failed", "That address points to a private or internal network"
             )
-    return url.strip()
+    return url.strip(), found
+
+
+def pin(url: str, found: list[str]) -> tuple[str, dict[str, str], dict]:
+    """Aim the request at the address that was checked, so the host name cannot be pointed
+    somewhere else between the check and the call. The Host header and TLS name stay the same."""
+    if not found:
+        return url, {}, {}
+    parts = urlparse(url)
+    ip = found[0]
+    host = f"[{ip}]" if ":" in ip else ip
+    netloc = host + (f":{parts.port}" if parts.port else "")
+    original = parts.hostname + (f":{parts.port}" if parts.port else "")
+    extensions = {"sni_hostname": parts.hostname} if parts.scheme == "https" else {}
+    return parts._replace(netloc=netloc).geturl(), {"Host": original}, extensions
 
 
 # ---------------------------------------------------------------- sending
@@ -126,7 +142,8 @@ async def attempt(db: AsyncSession, delivery: WebhookDelivery) -> None:
         error = "The webhook is off"
     else:
         try:
-            await check_url(hook.url)
+            _, found = await check_url(hook.url)
+            target, host_header, extensions = pin(hook.url, found)
             body = json.dumps(
                 {
                     "id": row.id,
@@ -144,9 +161,12 @@ async def attempt(db: AsyncSession, delivery: WebhookDelivery) -> None:
                 "X-Paddock-Delivery": str(delivery.id),
                 "X-Paddock-Timestamp": stamp,
                 "X-Paddock-Signature": sign(open_secret(hook.secret_enc), stamp, body),
+                **host_header,
             }
             async with make_client() as client:
-                res = await client.post(hook.url, content=body, headers=headers)
+                res = await client.post(
+                    target, content=body, headers=headers, extensions=extensions
+                )
             code = res.status_code
             if not 200 <= code < 300:
                 error = f"The server answered {code}"
@@ -258,7 +278,7 @@ async def create(
     secret = new_secret()
     hook = Webhook(
         user_id=actor.user.id,
-        url=await check_url(url),
+        url=(await check_url(url))[0],
         secret_enc=lock_secret(secret),
         event_types=sorted(set(event_types)),
         active=True,

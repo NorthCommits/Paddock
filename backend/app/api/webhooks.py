@@ -1,10 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 
 from app.api.deps import ActorDep, DbDep, client_ip
 from app.core.errors import AppError
+from app.core.ratelimit import limit
 from app.db.models import Event, Webhook, WebhookDelivery
 from app.schemas.webhooks import (
     DeliveryList,
@@ -34,7 +35,9 @@ def _out(hook: Webhook) -> dict:
     }
 
 
-@router.post("", status_code=201, response_model=WebhookCreated)
+@router.post(
+    "", status_code=201, response_model=WebhookCreated, dependencies=[Depends(limit("manage"))]
+)
 async def create(body: WebhookIn, request: Request, db: DbDep, actor: ActorDep):
     _need_scope(actor)
     hook, secret = await webhooks.create(
@@ -70,7 +73,7 @@ async def remove(hook_id: uuid.UUID, request: Request, db: DbDep, actor: ActorDe
     await webhooks.remove(db, actor, hook_id, client_ip(request))
 
 
-@router.post("/{hook_id}/test", response_model=DeliveryOut)
+@router.post("/{hook_id}/test", response_model=DeliveryOut, dependencies=[Depends(limit("manage"))])
 async def test(hook_id: uuid.UUID, db: DbDep, actor: ActorDep):
     _need_scope(actor)
     delivery = await webhooks.send_test(db, actor, hook_id)

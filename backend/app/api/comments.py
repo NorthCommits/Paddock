@@ -1,9 +1,10 @@
 import uuid
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 
 from app.api.deps import ActorDep, DbDep, client_ip
+from app.core.ratelimit import limit
 from app.schemas.comments import (
     ClaimIn,
     CommentEdit,
@@ -31,7 +32,12 @@ async def list_comments(
     return await comments.list_for_page(db, actor, page_id, status)
 
 
-@router.post("/v1/pages/{page_id}/comments", status_code=201, response_model=CommentOut)
+@router.post(
+    "/v1/pages/{page_id}/comments",
+    status_code=201,
+    response_model=CommentOut,
+    dependencies=[Depends(limit("comment"))],
+)
 async def create_comment(
     page_id: uuid.UUID, body: CommentIn, request: Request, db: DbDep, actor: ActorDep
 ):
@@ -47,20 +53,28 @@ async def create_comment(
     )
 
 
-@router.patch("/v1/comments/{comment_id}", response_model=CommentOut)
+@router.patch(
+    "/v1/comments/{comment_id}", response_model=CommentOut, dependencies=[Depends(limit("comment"))]
+)
 async def edit_comment(
     comment_id: uuid.UUID, body: CommentEdit, request: Request, db: DbDep, actor: ActorDep
 ):
     return await comments.edit(db, actor, comment_id, body=body.body, ip=client_ip(request))
 
 
-@router.delete("/v1/comments/{comment_id}", status_code=204)
+@router.delete(
+    "/v1/comments/{comment_id}", status_code=204, dependencies=[Depends(limit("comment"))]
+)
 async def delete_comment(comment_id: uuid.UUID, request: Request, db: DbDep, actor: ActorDep):
     await comments.delete(db, actor, comment_id, ip=client_ip(request))
     return Response(status_code=204)
 
 
-@router.post("/v1/comments/{comment_id}/resolve", response_model=CommentOut)
+@router.post(
+    "/v1/comments/{comment_id}/resolve",
+    response_model=CommentOut,
+    dependencies=[Depends(limit("comment"))],
+)
 async def resolve_comment(
     comment_id: uuid.UUID,
     request: Request,
@@ -83,7 +97,11 @@ async def list_requests(
     return await requests.list_requests(db, actor, status=status, page_id=page_id, limit=limit)
 
 
-@router.post("/v1/requests/{request_id}/claim", response_model=RequestItemOut)
+@router.post(
+    "/v1/requests/{request_id}/claim",
+    response_model=RequestItemOut,
+    dependencies=[Depends(limit("request"))],
+)
 async def claim_request(
     request_id: uuid.UUID,
     request: Request,
@@ -95,7 +113,11 @@ async def claim_request(
     return await requests.claim(db, actor, request_id, minutes=minutes, ip=client_ip(request))
 
 
-@router.post("/v1/requests/{request_id}/complete", response_model=RequestItemOut)
+@router.post(
+    "/v1/requests/{request_id}/complete",
+    response_model=RequestItemOut,
+    dependencies=[Depends(limit("request"))],
+)
 async def complete_request(
     request_id: uuid.UUID, body: CompleteIn, request: Request, db: DbDep, actor: ActorDep
 ):
@@ -109,7 +131,11 @@ async def complete_request(
     )
 
 
-@router.post("/v1/requests/{request_id}/dismiss", response_model=RequestItemOut)
+@router.post(
+    "/v1/requests/{request_id}/dismiss",
+    response_model=RequestItemOut,
+    dependencies=[Depends(limit("request"))],
+)
 async def dismiss_request(
     request_id: uuid.UUID,
     request: Request,

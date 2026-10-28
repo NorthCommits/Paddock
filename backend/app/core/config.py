@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     # Where uploaded files live: "local" (a folder on disk) or "s3" (any S3-compatible bucket,
     # such as Cloudflare R2, Backblaze B2 or Supabase Storage). Use s3 when hosting, because
     # free hosts wipe the disk on restart.
+    # Abuse controls (see app/core/ratelimit.py). PROXY_HOPS is how many proxies sit in front of the
+    # API and add to X-Forwarded-For, 0 meaning none.
+    rate_limit_enabled: bool = True
+    retention_enabled: bool = True  # the daily cleanup (app/services/retention.py)
+    proxy_hops: int = 0
+
     # Webhooks. Private network addresses are refused unless this is on (tests only).
     webhook_allow_private: bool = False
     webhook_worker: bool = True

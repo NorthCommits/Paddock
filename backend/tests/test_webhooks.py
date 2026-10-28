@@ -241,7 +241,11 @@ async def test_a_delivery_is_signed_and_marked_delivered(client, receiver):
     assert await webhooks.process_due() == 1
 
     (call,) = receiver.calls
-    assert str(call.url) == URL
+    # The call goes to the address that was checked, with the real name in Host and TLS.
+    assert call.url.host == "93.184.216.34"
+    assert call.url.path == "/paddock"
+    assert call.headers["host"] == "hooks.example.com"
+    assert call.extensions["sni_hostname"] == "hooks.example.com"
     body = call.content
     stamp = call.headers["x-paddock-timestamp"]
     expected = hmac.new(secret.encode(), stamp.encode() + b"." + body, hashlib.sha256).hexdigest()
@@ -314,7 +318,7 @@ async def test_redirects_are_not_followed(client, monkeypatch):
     await register(client, data, ["comment.created"])
     await comment(client, data, page_id, "hi")
     await webhooks.process_due()
-    assert calls == [URL]
+    assert calls == ["https://93.184.216.34/paddock"]
     (row,) = await deliveries()
     assert row.status == "pending"
     assert row.last_status_code == 302
@@ -434,3 +438,13 @@ async def test_seconds_until_next(client, receiver):
     await webhooks.process_due()
     wait = await webhooks.seconds_until_next()
     assert 50 < wait <= webhooks.RETRY_WAITS[0]
+
+
+def test_pin_aims_at_the_checked_address():
+    url, headers, ext = webhooks.pin("https://hooks.example.com:8443/a?b=1", ["2001:db8::1"])
+    assert url == "https://[2001:db8::1]:8443/a?b=1"
+    assert headers == {"Host": "hooks.example.com:8443"}
+    assert ext == {"sni_hostname": "hooks.example.com"}
+    plain = webhooks.pin("http://hooks.example.com/a", ["93.184.216.34"])
+    assert plain == ("http://93.184.216.34/a", {"Host": "hooks.example.com"}, {})
+    assert webhooks.pin("http://x.test/a", []) == ("http://x.test/a", {}, {})

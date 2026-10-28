@@ -1,10 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Depends, Header
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import ActorDep, DbDep
 from app.core.errors import AppError
+from app.core.ratelimit import limit
 from app.services import events
 from app.services.pages import get_for_actor
 
@@ -28,7 +29,7 @@ def _sse(user_id: uuid.UUID, page_id: uuid.UUID | None, last: int | None) -> Str
     )
 
 
-@router.get("/v1/events")
+@router.get("/v1/events", dependencies=[Depends(limit("stream"))])
 async def all_events(db: DbDep, actor: ActorDep, last_event_id: str | None = Header(None)):
     """Everything on the pages this person owns or has been given access to."""
     if "events:read" not in actor.scopes:
@@ -39,7 +40,7 @@ async def all_events(db: DbDep, actor: ActorDep, last_event_id: str | None = Hea
     return _sse(user_id, None, last)
 
 
-@router.get("/v1/pages/{page_id}/events")
+@router.get("/v1/pages/{page_id}/events", dependencies=[Depends(limit("stream"))])
 async def page_events(
     page_id: uuid.UUID, db: DbDep, actor: ActorDep, last_event_id: str | None = Header(None)
 ):
