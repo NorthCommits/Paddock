@@ -199,3 +199,116 @@ async def test_reauthorizing_same_client_leaves_one_live_token(client):
     assert len(rows) == 2
     assert rows[0].revoked_at is not None
     assert rows[1].revoked_at is None
+
+
+async def test_reuse_without_stored_token_id_still_revokes(client):
+    user = await _user(client)
+    async with get_sessionmaker()() as db:
+        app = await _register(db)
+        code = await _approve(db, user, app)
+        await _exchange(db, app, code)
+        await db.execute(update(OAuthCode).values(token_id=None))
+        await db.commit()
+        with pytest.raises(oauth.OAuthError) as err:
+            await _exchange(db, app, code)
+    assert err.value.code == "invalid_grant"
+    async with get_sessionmaker()() as db:
+        assert (await db.scalar(select(ApiToken))).revoked_at is not None
+
+
+async def test_exchange_fails_for_a_disabled_user_with_the_same_wording(client):
+    user = await _user(client)
+    async with get_sessionmaker()() as db:
+        app = await _register(db)
+        app_id = app.client_id
+        code = await _approve(db, user, app)
+        await db.execute(update(User).values(disabled_at=datetime.now(UTC)))
+        await db.commit()
+        with pytest.raises(oauth.OAuthError) as err:
+            await _exchange(db, app, code, client_id=app_id)
+        with pytest.raises(oauth.OAuthError) as unknown:
+            await _exchange(db, app, "unknown-code", client_id=app_id)
+    assert (err.value.code, err.value.description) == (
+        unknown.value.code,
+        unknown.value.description,
+    )
+    async with get_sessionmaker()() as db:
+        assert await db.scalar(select(ApiToken)) is None
+
+
+async def test_code_expiry_boundary(client, monkeypatch):
+    user = await _user(client)
+    async with get_sessionmaker()() as db:
+        app = await _register(db)
+        app_id = app.client_id
+        code = await _approve(db, user, app)
+        expires_at = (await db.scalar(select(OAuthCode))).expires_at
+        monkeypatch.setattr(oauth, "_now", lambda: expires_at)
+        with pytest.raises(oauth.OAuthError):
+            await _exchange(db, app, code, client_id=app_id)
+        monkeypatch.setattr(oauth, "_now", lambda: expires_at - timedelta(seconds=1))
+        token, _ = await _exchange(db, app, code, client_id=app_id)
+    assert token.startswith("pdk_")
+
+
+async def test_loopback_redirect_cannot_carry_userinfo_or_fragment(client):
+    async with get_sessionmaker()() as db:
+        app = await _register(db, uris=["http://localhost:1234/cb"])
+    for bad in (
+        "http://user@localhost:5555/cb",
+        "http://user:pw@localhost:5555/cb",
+        "http://localhost:5555/cb#frag",
+    ):
+        assert not oauth.redirect_ok(bad)
+        with pytest.raises(oauth.OAuthError) as err:
+            _check(app, redirect_uri=bad)
+        assert err.value.code == "invalid_request"
+
+
+def test_control_characters_in_a_redirect_are_refused():
+    for bad in (
+        "https://app.example.com/c\tb",
+        "https://app.example.com/cb\n",
+        "https://app.exam\rple.com/cb",
+        "https://app.example.com/ cb",
+        "https://app.example.com/cb\x7f",
+        "cursor://any\x00/oauth",
+    ):
+        assert not oauth.redirect_ok(bad)
+
+
+async def test_challenge_with_trailing_newline_is_refused(client):
+    async with get_sessionmaker()() as db:
+        app = await _register(db)
+    with pytest.raises(oauth.OAuthError) as err:
+        _check(app, code_challenge=CHALLENGE + "\n")
+    assert err.value.code == "invalid_request"
+
+
+async def test_malformed_verifier_is_refused(client):
+    user = await _user(client)
+    async with get_sessionmaker()() as db:
+        app = await _register(db)
+        app_id = app.client_id
+        code = await _approve(db, user, app)
+        for bad in ("short", "v" * 129, VERIFIER + "\n", "v" * 49 + "!"):
+            with pytest.raises(oauth.OAuthError) as err:
+                await _exchange(db, app, code, verifier=bad, client_id=app_id)
+            assert err.value.code == "invalid_grant"
+        token, _ = await _exchange(db, app, code, client_id=app_id)
+    assert token.startswith("pdk_")
+
+
+async def test_token_create_without_commit_waits_for_the_caller(client):
+    from app.services import tokens
+
+    user = await _user(client)
+    async with get_sessionmaker()() as db:
+        await tokens.create(
+            db, user, name="x", scopes=["pages:read"], expires_in_days=None, ip=None, commit=False
+        )
+        async with get_sessionmaker()() as other:
+            assert await other.scalar(select(ApiToken)) is None
+        await db.commit()
+        async with get_sessionmaker()() as other:
+            assert await other.scalar(select(ApiToken)) is not None

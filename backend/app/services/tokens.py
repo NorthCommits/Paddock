@@ -27,6 +27,7 @@ async def create(
     ip: str | None,
     client_id: str | None = None,
     source: str = "manual",
+    commit: bool = True,
 ) -> tuple[ApiToken, str]:
     raw = TOKEN_PREFIX + new_secret()
     token = ApiToken(
@@ -50,7 +51,8 @@ async def create(
         ip=ip,
         meta={"name": name, "scopes": scopes},
     )
-    await db.commit()
+    if commit:
+        await db.commit()
     return token, raw
 
 

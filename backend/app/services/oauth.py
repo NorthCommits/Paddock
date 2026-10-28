@@ -29,7 +29,8 @@ MAX_URI_LENGTH = 500
 MAX_NAME_LENGTH = 100
 LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 BLOCKED_SCHEMES = ("javascript", "data", "file", "vbscript", "blob", "about", "http")
-CHALLENGE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43,128}$")
+CHALLENGE_PATTERN = re.compile(r"[A-Za-z0-9_-]{43,128}")
+VERIFIER_PATTERN = re.compile(r"[A-Za-z0-9._~-]{43,128}")
 GRANT_ERROR = "The code is invalid, expired, or already used."
 
 
@@ -59,8 +60,11 @@ def _is_loopback(parts) -> bool:
 
 def redirect_ok(uri: str) -> bool:
     """Is this a redirect address we are willing to send a person back to?"""
+    # urlsplit silently drops tab, CR and LF, so refuse control and space characters first.
+    if any(ord(c) < 0x21 or ord(c) == 0x7F for c in uri):
+        return False
     parts = _split(uri)
-    if parts is None or uri != uri.strip() or parts.fragment:
+    if parts is None or parts.fragment or "@" in parts.netloc:
         return False
     if parts.scheme == "https":
         return bool(parts.hostname)
@@ -78,6 +82,8 @@ def _same_redirect(registered: str, given: str) -> bool:
     if a is None or b is None or not (_is_loopback(a) and _is_loopback(b)):
         return False
     # RFC 8252 section 7.3: only the port of a loopback address may differ.
+    if a.fragment or b.fragment:
+        return False
     return (a.hostname, a.path, a.query) == (b.hostname, b.path, b.query)
 
 
@@ -122,11 +128,13 @@ def check_request(
     """Validate an authorization request. Returns the scopes that would be granted."""
     if response_type != "code":
         raise OAuthError("unsupported_response_type", "Only response_type=code is supported.")
-    if not any(_same_redirect(registered, redirect_uri) for registered in client.redirect_uris):
+    if not redirect_ok(redirect_uri) or not any(
+        _same_redirect(registered, redirect_uri) for registered in client.redirect_uris
+    ):
         raise OAuthError("invalid_request", "The redirect address is not registered.")
     if code_challenge_method != "S256":
         raise OAuthError("invalid_request", "code_challenge_method must be S256.")
-    if not CHALLENGE_PATTERN.match(code_challenge or ""):
+    if not CHALLENGE_PATTERN.fullmatch(code_challenge or ""):
         raise OAuthError("invalid_request", "The code_challenge is missing or malformed.")
     if scope is None or not scope.split():
         return list(OFFERED_SCOPES)
@@ -220,6 +228,7 @@ async def exchange(
         and same_value(row.client_id, client_id)
         and row.expires_at > _now()
         and same_value(row.redirect_uri, redirect_uri)
+        and VERIFIER_PATTERN.fullmatch(code_verifier or "") is not None
         and _pkce_matches(code_verifier, row.code_challenge)
     )
     if not valid:
@@ -252,6 +261,7 @@ async def exchange(
         target_id=client.client_id,
         ip=ip,
     )
+    # commit=False: the token, used_at, token_id and revocations are saved in one commit.
     token, raw = await tokens.create(
         db,
         user,
@@ -261,6 +271,7 @@ async def exchange(
         ip=ip,
         client_id=client.client_id,
         source="oauth",
+        commit=False,
     )
     row.token_id = token.id
     await db.commit()
