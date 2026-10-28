@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     secret_key: str = DEV_SECRET
     app_origin: str = "http://localhost:3000"
     content_origin: str = "http://localhost:8001"
+    # The API's own public address. It is the OAuth issuer and the host of the MCP address.
+    api_public_url: str = "http://localhost:8000"
 
     # Upload limits (see SDD section 5.1)
     max_bundle_bytes: int = 25 * 1024 * 1024

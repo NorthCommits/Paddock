@@ -27,6 +27,8 @@ EXPECTED_TABLES = {
     "events",
     "webhooks",
     "webhook_deliveries",
+    "oauth_clients",
+    "oauth_codes",
     "alembic_version",
 }
 

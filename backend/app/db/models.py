@@ -60,8 +60,45 @@ class ApiToken(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when a person approved an app through the sign-in flow ("oauth"), else "manual".
+    client_id: Mapped[str | None] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(10), default="manual", server_default="manual")
 
     __table_args__ = (Index("ix_api_tokens_user_id", "user_id"),)
+
+
+class OAuthClient(Base):
+    """An app (Claude, ChatGPT, Codex...) that registered itself to connect through sign-in."""
+
+    __tablename__ = "oauth_clients"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[str] = mapped_column(String(64), unique=True)
+    client_name: Mapped[str] = mapped_column(String(100))
+    redirect_uris: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    created_at: Mapped[datetime] = _now_column()
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OAuthCode(Base):
+    """A single-use code handed to an app after a person clicks Allow. Only a hash is stored."""
+
+    __tablename__ = "oauth_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    client_id: Mapped[str] = mapped_column(String(64))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    redirect_uri: Mapped[str] = mapped_column(Text)
+    code_challenge: Mapped[str] = mapped_column(String(128))
+    scopes: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The token this code produced, so that using the code twice can revoke it.
+    token_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    created_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (Index("ix_oauth_codes_expires_at", "expires_at"),)
 
 
 class AuditLog(Base):
