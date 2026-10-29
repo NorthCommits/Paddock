@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
+import { AddAgentHint } from "@/components/add-agent-hint";
 import { CommentsPanel, markNumbers, useThreads } from "@/components/comments-panel";
 import { PageFrame } from "@/components/page-frame";
 import { ShareSheet } from "@/components/share-sheet";
@@ -150,6 +151,7 @@ export default function PageViewer() {
         {p && <Badge variant={old ? "neutral" : "success"}>{old ? `Viewing v${shown}` : `v${current}`}</Badge>}
         {p && !isOwner && <Badge>{ROLE_LABEL[p.role]}</Badge>}
         <span className="flex-1" />
+        <AddAgentHint />
         {old && canEdit && (
           <Button size="sm" variant="secondary" onClick={() => shownVersion && setRollback(shownVersion)}>
             <RotateCcw aria-hidden="true" /> Restore this version
