@@ -131,7 +131,7 @@ check the health command before relying on it.
 A job removes old data once a day in the API process (first run five minutes after start).
 Run it by hand with `python -m app.jobs retention`. What it removes: events and delivery history
 older than 30 days, ended invitations and links older than 30 days, pages deleted over 30 days
-ago, files no version uses for 7 days, and audit entries over a year old. It also removes sign-in codes a day after they expire or are used, and apps that registered to connect but were never used for 30 days and hold no live token.
+ago, files no version uses for 7 days, and audit entries over a year old. It also removes sign-in codes a day after they expire or are used, and apps that registered to connect but have not been used for 30 days and hold no live token.
 
 ## Rotating secrets
 

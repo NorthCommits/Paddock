@@ -64,3 +64,4 @@ Report back: the Codex version (`codex --version`), what happened at each step, 
 - Click Deny on the consent page instead of Allow. The app should say access was denied, and no row should appear in Settings, Tokens.
 - Revoke the connection in Settings, then use the app again. The tools should fail and the app should offer to sign in again.
 - Wait for the free server to sleep (about 15 minutes idle) and connect again. The first attempt may take up to a minute while the server wakes. Report how the app behaves while it waits.
+- If an app times out on the token step while the free server wakes, remove the connection in Settings, then Tokens, and connect again.

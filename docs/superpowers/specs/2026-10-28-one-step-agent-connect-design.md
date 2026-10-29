@@ -61,7 +61,7 @@ Rules:
 - PKCE with S256 is required. Plain is refused.
 - Redirect address must exactly match one registered, with one exception: for `http` loopback addresses (`localhost`, `127.0.0.1`, `[::1]`) the port may differ (RFC 8252), because Claude Code and Codex choose a free port at run time. Allowed addresses: `https`, `http` on loopback, and private-use custom schemes (at least 3 characters, not `javascript`, `data`, `file`, `vbscript`, `blob`, `about`, and not `http`) so Cursor works.
 - Codes are random, stored hashed, valid for 10 minutes and usable once. A second use revokes the token it produced.
-- The `resource` parameter, if sent, must equal our MCP address.
+- The `resource` parameter is accepted but not enforced (tokens are not bound to an audience).
 - Scopes offered: `pages:read pages:write comments:read comments:write requests:act`. `events:read` is not offered.
 - A person who re-authorizes the same client gets a new token and the older OAuth token for that client is revoked, so Settings does not fill up.
 
@@ -115,7 +115,7 @@ Settings: `API_PUBLIC_URL` on the backend (the API's public origin, issuer and M
 
 - Open dynamic registration is required by the tools, so abuse is limited by: per-IP rate limit, exact redirect matching, PKCE, single-use short codes, no secrets in clients, and consent that names the return host.
 - The consent page is the only place a person grants access, and only a signed-in person with a verified email can approve (agent tokens cannot).
-- An audit log entry is written for registration, approval, denial and revocation.
+- An audit log entry is written for registration, approval, denial and revocation (including revocation on code reuse and on reconnect). Denial is audited.
 - Tokens are shown to nobody. They travel only from `/oauth/token` to the tool.
 - Not stored: client secrets (public clients only).
 

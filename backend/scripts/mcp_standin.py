@@ -1,10 +1,12 @@
 """A stand-in for Claude Desktop or ChatGPT. It connects to a running Paddock the way they do.
 
-    python scripts/mcp_standin.py --url http://localhost:8000 --sign-in-token <your sign-in token>
+    PADDOCK_SIGN_IN_TOKEN=<your sign-in token> python scripts/mcp_standin.py --url http://localhost:8000
 
 The sign-in token plays the part of the person clicking Allow on the consent page. It is the
-token your browser holds after signing in. Pass it here only on a machine you trust, and
-never paste it into chat. The script prints each step and publishes one small test page.
+token your browser holds after signing in. It is read from the environment variable
+PADDOCK_SIGN_IN_TOKEN (not a command line flag, so it stays out of the process list). Use it
+only on a machine you trust, and never paste it into chat. The script prints each step,
+publishes one small test page, and at the end revokes the token it created.
 """
 
 import argparse
@@ -12,6 +14,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import os
 import secrets
 from urllib.parse import parse_qs, urlsplit
 
@@ -33,8 +36,10 @@ def query_of(url: str) -> dict[str, str]:
 async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True, help="the API address, like http://localhost:8000")
-    ap.add_argument("--sign-in-token", required=True)
     args = ap.parse_args()
+    sign_in = os.environ.get("PADDOCK_SIGN_IN_TOKEN", "")
+    if not sign_in:
+        raise SystemExit("Set PADDOCK_SIGN_IN_TOKEN to your sign-in token.")
     base = args.url.rstrip("/")
 
     async with httpx.AsyncClient(base_url=base, follow_redirects=False, timeout=30) as http:
@@ -83,7 +88,7 @@ async def main() -> None:
         approved = await http.post(
             f"{base}/v1/oauth/approve",
             json={**query_of(consent_url), "decision": "allow"},
-            headers={"Authorization": f"Bearer {args.sign_in_token}"},
+            headers={"Authorization": f"Bearer {sign_in}"},
         )
         approved.raise_for_status()
         back = query_of(approved.json()["redirect_to"])
@@ -119,6 +124,17 @@ async def main() -> None:
                 },
             )
             step(9, f"publish_page returned: {json.loads(made.content[0].text)}")
+
+    # Clean up: take back the access token this script made, using the person's sign-in.
+    person = {"Authorization": f"Bearer {sign_in}"}
+    async with httpx.AsyncClient(base_url=base, headers=person, timeout=30) as http:
+        rows = (await http.get("/v1/tokens")).json()
+        mine = [t for t in rows if t["source"] == "oauth" and access.startswith(t["prefix"])]
+        mine.sort(key=lambda t: t["created_at"], reverse=True)
+        gone = await http.delete(f"/v1/tokens/{mine[0]['id']}")
+        gone.raise_for_status()
+        after = await http.get("/mcp", headers={"Authorization": f"Bearer {access}"})
+        step(10, f"revoked the stand-in token (it now gets {after.status_code} from /mcp)")
 
 
 if __name__ == "__main__":

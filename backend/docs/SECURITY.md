@@ -144,11 +144,11 @@ Apps such as Claude Desktop connect through OAuth 2.1 for public clients: the AP
 What the code does:
 
 - **Public clients only.** There are no client secrets. Every request uses PKCE with `S256`; `plain` is refused.
-- **Redirect addresses are matched exactly.** An address must be registered first. The one exception is the loopback rule (RFC 8252): for `http://127.0.0.1`, `localhost` or `[::1]` the port may differ. Fragments, embedded user names, whitespace and control characters are refused. An unknown app or an unregistered redirect address gets an error page and is never redirected to.
+- **Redirect addresses are matched exactly.** An address must be registered first. The one exception is the loopback rule (RFC 8252): for `http://127.0.0.1`, `localhost` or `[::1]` the port may differ. Fragments, embedded user names, whitespace and control characters are refused. An unknown app or an unregistered redirect address gets a short JSON error and is never redirected to. Redirect addresses must be plain ASCII with no backslash, so a look-alike host cannot pass for a trusted one on the consent page; the page shows the real host and port. App names with control or invisible characters are refused.
 - **One time codes.** A code lives 10 minutes, is stored only as a hash and can be used once. Using a code a second time revokes the token it produced.
-- **Only a verified person can approve.** Approval needs the person's own sign-in with a confirmed email. An agent token cannot approve, so an agent cannot grant itself or another app more access. Deny creates nothing.
+- **Only a verified person can approve.** Approval needs the person's own sign-in with a confirmed email. An agent token cannot approve, so an agent cannot grant itself or another app more access. Deny creates nothing. Deny, revoking old tokens on reconnect and revoking on code reuse each write an audit entry.
 - **The person sees what they grant.** The consent page shows the app name, where the person will return to, and the permissions in plain words. Only five scopes are offered; `events:read` is not.
-- **Connecting again replaces the old connection** for the same app and person, so reconnecting does not leave stale tokens behind.
+- **Connecting again replaces the old connection** for the same app and person, so reconnecting does not leave stale tokens behind. This holds only while the app keeps its `client_id`; an app that registers afresh gets a new one. Revoked rows stay listed in Settings.
 - **Abuse controls.** Registration is limited to 20 per minute per caller address (keyed on the address, not on request headers). Token and approval calls use the existing limits. The MCP tools share the REST limits, including `publish` and `view`.
 - **Open cross origin access without credentials.** `/oauth`, `/.well-known` and `/mcp` accept any origin but never cookies, because authentication there is a bearer token only. For the same reason the library's DNS rebinding host check is turned off; it would reject every real host name, and a page that rebinds to the API holds no credential to abuse.
 - **MCP tools use the same rules as REST.** Each tool call opens its own database session, checks the token again (a revoked token stops working at the next call), and goes through the same service functions, scopes, verified email rule, size and path limits, and audit records. Another person's page or request answers "not found".
@@ -161,6 +161,8 @@ Open items:
 3. **Per address limits depend on `PROXY_HOPS`.** A wrong value makes everyone share the registration limit or lets a caller pick their own address.
 4. **Tokens from apps do not expire.** They stay valid until revoked. Revoke in Settings, then Tokens.
 5. **Not yet tested against the real apps.** Tests use a stand-in client. Follow `docs/MANUAL-CONNECT-CHECKLIST.md` before relying on it.
+6. **The authorize endpoint redirects errors without a page.** For a registered address, errors such as a bad scope redirect straight to it with `error` and `state`, with no person seeing a page. That makes the API host an open redirector for registered addresses only (RFC 9700 section 4.11.2). Accepted: the address must have been registered, never carries a code, and unregistered addresses are never redirected to.
+7. **A retried token call loses the token.** A client that repeats the token call with an already used code gets `invalid_grant` and, by design, the token it got from the first call is revoked. It must sign in again.
 
 ## Open items and limits
 

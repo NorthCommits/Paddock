@@ -20,6 +20,16 @@ const MEANING: Record<string, string> = {
   "requests:act": "Pick up and finish requests you give it",
 };
 
+const BLOCKED_SCHEMES = ["javascript:", "data:", "vbscript:", "blob:", "file:"];
+
+function safeToVisit(target: string): boolean {
+  try {
+    return !BLOCKED_SCHEMES.includes(new URL(target).protocol.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 const FIELDS = ["client_id", "redirect_uri", "code_challenge", "code_challenge_method", "response_type", "scope", "state"] as const;
 
 function readRequest(params: URLSearchParams): OAuthRequest | null {
@@ -60,10 +70,12 @@ function Consent() {
     revalidateOnFocus: false,
   });
 
+  const previewSignedOut = preview.error instanceof ApiError && preview.error.status === 401;
+
   useEffect(() => {
-    if (signedOut) router.replace(`/login?next=${encodeURIComponent(here)}`);
+    if (signedOut || previewSignedOut) router.replace(`/login?next=${encodeURIComponent(here)}`);
     if (needsHandle) router.replace(`/welcome?next=${encodeURIComponent(here)}`);
-  }, [signedOut, needsHandle, router, here]);
+  }, [signedOut, previewSignedOut, needsHandle, router, here]);
 
   useEffect(() => {
     if (preview.data || preview.error || !request || unverified) heading.current?.focus();
@@ -75,6 +87,7 @@ function Consent() {
     setError("");
     try {
       const { redirect_to } = await oauthApprove(request, decision);
+      if (!safeToVisit(redirect_to)) throw new Error("unsafe redirect");
       setDone(decision);
       window.location.assign(redirect_to);
     } catch (err) {
@@ -171,7 +184,7 @@ function Consent() {
       </ul>
       <p className="mt-4 text-[13px] leading-5 text-muted-foreground">
         You will return to <span className="font-medium text-foreground">{info.redirect_host}</span>. You can remove this
-        connection any time in Connect an agent.
+        connection any time in Settings, then Tokens.
       </p>
 
       {error && (
