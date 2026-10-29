@@ -120,6 +120,28 @@ async def emit(db: AsyncSession, page_id: uuid.UUID, type_: str, data: dict) -> 
     return row
 
 
+def push(
+    page_id: uuid.UUID, type_: str, data: dict, audience: list[uuid.UUID] | None = None
+) -> None:
+    """Send a live-only event to open page streams. Nothing is stored and webhooks never see it.
+
+    It is for people only: agent streams skip it. With an audience, only those people get it.
+    Call it after the change is committed.
+    """
+    hub.publish(
+        {
+            "id": None,
+            "type": type_,
+            "page_id": str(page_id),
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": data,
+            "owner": "",
+            "people_only": True,
+            "audience": [str(a) for a in audience] if audience else None,
+        }
+    )
+
+
 @event.listens_for(Session, "after_commit")
 def _publish(session: Session) -> None:
     events = session.info.pop("events", [])
@@ -183,15 +205,16 @@ async def replay(user_id: uuid.UUID, page_id: uuid.UUID | None, last_id: int) ->
 
 
 def frame(item: dict) -> str:
-    body = {k: v for k, v in item.items() if k != "owner"}
-    return f"id: {item['id']}\nevent: {item['type']}\ndata: {json.dumps(body)}\n\n"
+    body = {k: v for k, v in item.items() if k not in ("owner", "people_only", "audience")}
+    ident = f"id: {item['id']}\n" if item["id"] is not None else ""
+    return f"{ident}event: {item['type']}\ndata: {json.dumps(body)}\n\n"
 
 
 RESYNC = "event: resync\ndata: {}\n\n"
 
 
 async def stream(
-    user_id: uuid.UUID, page_id: uuid.UUID | None, last_id: int | None
+    user_id: uuid.UUID, page_id: uuid.UUID | None, last_id: int | None, person: bool = True
 ) -> AsyncIterator[str]:
     """Server-sent events for one person, optionally limited to one page."""
     sub = hub.subscribe()  # subscribe first, so nothing is missed while replaying
@@ -216,14 +239,20 @@ async def stream(
             except TimeoutError:
                 yield ": ping\n\n"
                 continue
-            if seen is not None and item["id"] <= seen:
+            live_only = item["id"] is None  # not stored, so no id to compare or remember
+            if live_only and (
+                not person or str(user_id) not in (item["audience"] or [str(user_id)])
+            ):
+                continue
+            if not live_only and seen is not None and item["id"] <= seen:
                 continue  # already sent during the replay
             if page_id is not None and item["page_id"] != str(page_id):
                 continue
             page = uuid.UUID(item["page_id"]) if item["page_id"] else None
             if not await can_see(user_id, page, item["type"]):
                 continue
-            seen = item["id"]
+            if not live_only:
+                seen = item["id"]
             yield frame(item)
     finally:
         hub.unsubscribe(sub)

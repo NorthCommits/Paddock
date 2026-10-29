@@ -164,7 +164,7 @@ async def test_the_command_prints_counts(client, capsys):
     # The command itself starts its own event loop, so check the same code path here.
     counts = await retention.run()
     assert json.dumps(counts)
-    assert set(counts) == {"pages", "events", "access", "audit", "blobs", "oauth"}
+    assert set(counts) == {"pages", "events", "messages", "access", "audit", "blobs", "oauth"}
 
 
 # ------------------------------------------------------------ sign-in codes and apps

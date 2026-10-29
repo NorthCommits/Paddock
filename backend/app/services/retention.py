@@ -20,6 +20,8 @@ from app.db.models import (
     OAuthCode,
     Page,
     PageInvite,
+    PageMessage,
+    PagePresence,
     PageVersion,
     ShareLink,
     VersionFile,
@@ -31,6 +33,7 @@ from app.services.storage import get_storage
 log = logging.getLogger("paddock.retention")
 
 EVENT_DAYS = 30  # events and delivery history
+MESSAGE_DAYS = 30  # page chat messages
 DELETED_PAGE_DAYS = 30  # a deleted page is kept this long, then removed for good
 BLOB_DAYS = 7  # a file nobody uses is kept this long, then removed from storage
 OLD_ACCESS_DAYS = 30  # invitations and share links that ended
@@ -153,10 +156,21 @@ async def purge_unused_blobs(db: AsyncSession) -> int:
     return removed
 
 
+async def purge_old_messages(db: AsyncSession) -> int:
+    """Chat messages are kept 30 days. Old presence rows go too, they only matter for a minute."""
+    result = await db.execute(
+        delete(PageMessage).where(PageMessage.created_at < _ago(MESSAGE_DAYS))
+    )
+    await db.execute(delete(PagePresence).where(PagePresence.last_seen_at < _ago(1)))
+    await db.commit()
+    return result.rowcount
+
+
 async def run() -> dict[str, int]:
     steps = (
         ("pages", purge_deleted_pages),
         ("events", purge_old_events),
+        ("messages", purge_old_messages),
         ("access", purge_old_access),
         ("audit", purge_audit),
         ("oauth", purge_oauth),

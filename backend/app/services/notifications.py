@@ -24,7 +24,7 @@ def add(
     kind: str,
     *,
     page_id: uuid.UUID,
-    request_id: uuid.UUID,
+    request_id: uuid.UUID | None,
     actor_id: uuid.UUID | None,
     body: str,
 ) -> None:

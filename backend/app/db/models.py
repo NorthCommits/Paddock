@@ -189,6 +189,39 @@ class PageMember(Base):
     )
 
 
+class PagePresence(Base):
+    """Who has a page open right now. A row older than the presence window is ignored."""
+
+    __tablename__ = "page_presence"
+
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    last_seen_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (PrimaryKeyConstraint("page_id", "user_id"),)
+
+
+class PageMessage(Base):
+    """A chat message on a page. No recipient means the whole page, otherwise one person."""
+
+    __tablename__ = "page_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    sender_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    recipient_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE")
+    )
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = _now_column()
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("ix_page_messages_page_created", "page_id", "created_at"),
+        Index("ix_page_messages_recipient_id", "recipient_id"),
+    )
+
+
 class PageInvite(Base):
     """An invitation sent to an email address. Only a hash of the token is stored."""
 

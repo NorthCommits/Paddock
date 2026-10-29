@@ -359,7 +359,7 @@ export const EVENT_GROUPS: { title: string; types: { id: string; label: string }
 
 export type AppNotification = {
   id: string;
-  kind: "agent_offer" | "agent_approved" | "agent_done";
+  kind: "agent_offer" | "agent_approved" | "agent_done" | "chat_message";
   created_at: string;
   read: boolean;
   body: string;
@@ -384,3 +384,15 @@ export function approveRequest(id: string): Promise<RequestInfo> {
 export function declineRequest(id: string): Promise<RequestInfo> {
   return api<RequestInfo>(`/v1/requests/${id}/decline`, { method: "POST" });
 }
+
+/** Someone who can open a page. `here` is true while they have it open. */
+export type Person = { id: string; handle: string; display_name: string; here: boolean };
+
+export type ChatMessage = {
+  id: string;
+  sender: { id: string; handle: string; display_name: string };
+  to: string | null; // null means the whole page
+  body: string;
+  created_at: string;
+  deleted: boolean;
+};
