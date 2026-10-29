@@ -43,6 +43,8 @@ class User(Base):
     created_at: Mapped[datetime] = _now_column()
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The colour theme the person chose: "system" follows the device, or "light" or "dark".
+    theme: Mapped[str] = mapped_column(String(10), default="system", server_default="system")
 
 
 class ApiToken(Base):

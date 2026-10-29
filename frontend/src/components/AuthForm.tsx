@@ -4,10 +4,11 @@ import { Check } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCalm } from "@/lib/motion";
 import { authClient } from "@/lib/auth/client";
 import { authCode, authMessage, carryQuery, resetSessionCache, safeNext } from "@/lib/auth/session";
+import { forgetTheme } from "@/lib/theme";
 import { AuthLayout } from "./AuthLayout";
 import { Button } from "./ui/button";
 import { PasswordField } from "./password-field";
@@ -22,6 +23,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const prefill = params.get("email") ?? "";
   const justReset = params.get("reset") === "1";
   const calm = useCalm();
+  // Someone is signing in, so no earlier choice should show until their own account loads.
+  useEffect(() => forgetTheme(), []);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");

@@ -164,6 +164,41 @@ async def test_profile_name_can_change(client):
     assert done.json()["display_name"] == "Ana L."
 
 
+async def test_theme_defaults_to_system_and_can_be_saved(client):
+    data = await signup(client)
+    assert (await client.get("/v1/me", headers=bearer(data["token"]))).json()["user"][
+        "theme"
+    ] == "system"
+    done = await client.patch("/v1/me", json={"theme": "dark"}, headers=bearer(data["token"]))
+    assert done.status_code == 200 and done.json()["theme"] == "dark"
+    assert (await client.get("/v1/me", headers=bearer(data["token"]))).json()["user"][
+        "theme"
+    ] == "dark"
+    # Changing only the name leaves the theme alone, and back to system works.
+    renamed = await client.patch(
+        "/v1/me", json={"display_name": "Ana"}, headers=bearer(data["token"])
+    )
+    assert renamed.json()["theme"] == "dark" and renamed.json()["display_name"] == "Ana"
+    back = await client.patch("/v1/me", json={"theme": "system"}, headers=bearer(data["token"]))
+    assert back.json()["theme"] == "system"
+
+
+async def test_theme_must_be_a_known_value_and_something_must_change(client):
+    data = await signup(client)
+    for body in ({"theme": "purple"}, {}, {"theme": None}):
+        r = await client.patch("/v1/me", json=body, headers=bearer(data["token"]))
+        assert r.status_code == 422, body
+
+
+async def test_api_tokens_cannot_change_the_theme(client):
+    from .helpers import make_token
+
+    data = await signup(client)
+    token = await make_token(client, data)
+    r = await client.patch("/v1/me", json={"theme": "dark"}, headers=bearer(token["token"]))
+    assert r.status_code == 403
+
+
 async def test_api_tokens_cannot_edit_the_profile(client):
     from .helpers import make_token
 
