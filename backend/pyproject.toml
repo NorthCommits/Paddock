@@ -15,6 +15,7 @@ dependencies = [
     "certifi>=2024.8.30",
     "boto3>=1.35",
     "python-multipart>=0.0.9",
+    "mcp>=2.3.0",
 ]
 
 [dependency-groups]
@@ -34,6 +35,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
+# The throwaway test Postgres asks platformdirs for a runtime folder; containers have none.
+filterwarnings = ["ignore:XDG_RUNTIME_DIR is not set:Warning"]
 
 [tool.ruff]
 line-length = 100

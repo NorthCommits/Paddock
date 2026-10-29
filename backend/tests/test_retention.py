@@ -164,4 +164,47 @@ async def test_the_command_prints_counts(client, capsys):
     # The command itself starts its own event loop, so check the same code path here.
     counts = await retention.run()
     assert json.dumps(counts)
-    assert set(counts) == {"pages", "events", "access", "audit", "blobs"}
+    assert set(counts) == {"pages", "events", "access", "audit", "blobs", "oauth"}
+
+
+# ------------------------------------------------------------ sign-in codes and apps
+
+
+async def test_purge_oauth_removes_old_rows_but_keeps_clients_with_live_tokens(client):
+    from app.db.models import OAuthClient, OAuthCode
+
+    from .helpers import signup
+    from .test_oauth_api import allowed_code, register, token_form
+
+    data = await signup(client)
+    held = await register(client, name="Holds a token")
+    unused = await register(client, name="Unused")
+    fresh = await register(client, name="Fresh")
+    revoked = await register(client, name="Token revoked")
+
+    for app in (held, revoked):
+        code = await allowed_code(client, data, app["client_id"])
+        exchanged = await client.post("/oauth/token", data=token_form(app["client_id"], code))
+        assert exchanged.status_code == 200
+    await sql(
+        f"update api_tokens set revoked_at = now() where client_id = '{revoked['client_id']}'"
+    )
+    await allowed_code(client, data, fresh["client_id"])  # a code still waiting to be used
+
+    await sql(
+        "update oauth_clients set created_at = now() - interval '40 days', "
+        "last_used_at = now() - interval '40 days' "
+        f"where client_id in ('{held['client_id']}', '{unused['client_id']}', "
+        f"'{revoked['client_id']}')"
+    )
+    await sql(
+        "update oauth_codes set used_at = now() - interval '2 days' where used_at is not null"
+    )
+
+    async with AsyncSession(get_engine()) as db:
+        removed = await retention.purge_oauth(db)
+    assert removed == 4  # two used codes and the two apps with no live token
+
+    assert {c.client_name for c in await rows(OAuthClient)} == {"Holds a token", "Fresh"}
+    left = await rows(OAuthCode)
+    assert [c.client_id for c in left] == [fresh["client_id"]]

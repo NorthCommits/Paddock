@@ -1,10 +1,17 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import useSWR from "swr";
+import { ToolTabs } from "@/components/connect/tool-tabs";
 import { CopyField } from "@/components/copy-field";
 import { LinkButton } from "@/components/ui/button";
+import { api } from "@/lib/api";
+import type { TokenRow } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { warmServers } from "@/lib/warm";
+
+const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? "http://localhost:8000/mcp";
 
 const snippets: Record<string, string> = {
   curl: 'curl -H "Authorization: Bearer $PADDOCK_TOKEN" \\\n  https://your-paddock-address/api/v1/me',
@@ -48,13 +55,12 @@ function Step({ n, title, children, last }: { n: number; title: string; children
   );
 }
 
-export default function Page() {
+function Advanced() {
   const [tab, setTab] = useState("curl");
   return (
-    <div className="max-w-[640px]">
-      <h1 className="text-[22px] font-semibold leading-7 tracking-[-0.01em] text-foreground">Connect an agent</h1>
-      <p className="mt-2 text-[15px] leading-[22px] text-muted-foreground">
-        Any agent that can run a command or call an HTTP API can work with Paddock. You keep the model and its keys.
+    <div>
+      <p className="text-[15px] leading-[22px] text-muted-foreground">
+        Any agent that can run a command or call an HTTP API can work with Paddock, using a token you make yourself.
       </p>
       <ol className="mt-8">
         <Step n={1} title="Create a token">
@@ -118,6 +124,38 @@ export default function Page() {
           <CopyField label="command line steps" value={cliSteps} />
         </div>
       </section>
+    </div>
+  );
+}
+
+const live = (t: TokenRow) =>
+  !t.revoked_at && !(t.expires_at && new Date(t.expires_at) < new Date());
+
+export default function Page() {
+  // The address may point at a sleeping free server. Wake it now so the app finds it ready.
+  useEffect(() => warmServers(), []);
+  // The same key as the Tokens settings page, so a revoke there shows here at once.
+  const { data } = useSWR("tokens", () => api<TokenRow[]>("/v1/tokens"), { refreshInterval: 3000 });
+  const connectedNames = (data ?? []).filter((t) => t.source === "oauth" && live(t)).map((t) => t.name);
+
+  return (
+    <div className="max-w-[640px]">
+      <h1 className="text-[22px] font-semibold leading-7 tracking-[-0.01em] text-foreground">Connect an agent</h1>
+      <p className="mt-2 text-[15px] leading-[22px] text-muted-foreground">
+        Pick your tool, paste one address, and click Allow. There is no token to copy, and you keep the model and its keys.
+      </p>
+      <div className="mt-6">
+        <ToolTabs mcpUrl={MCP_URL} connectedNames={connectedNames} />
+      </div>
+
+      <details className="group mt-10 rounded-xl border border-border bg-card p-5 shadow-card">
+        <summary className="cursor-pointer text-[15px] font-semibold text-foreground">
+          Advanced: tokens and the command line
+        </summary>
+        <div className="mt-5">
+          <Advanced />
+        </div>
+      </details>
     </div>
   );
 }

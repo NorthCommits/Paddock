@@ -25,6 +25,9 @@ async def create(
     scopes: list[str],
     expires_in_days: int | None,
     ip: str | None,
+    client_id: str | None = None,
+    source: str = "manual",
+    commit: bool = True,
 ) -> tuple[ApiToken, str]:
     raw = TOKEN_PREFIX + new_secret()
     token = ApiToken(
@@ -34,6 +37,8 @@ async def create(
         token_hash=sha256_hex(raw),
         scopes=scopes,
         expires_at=_now() + timedelta(days=expires_in_days) if expires_in_days else None,
+        client_id=client_id,
+        source=source,
     )
     db.add(token)
     await db.flush()
@@ -46,7 +51,8 @@ async def create(
         ip=ip,
         meta={"name": name, "scopes": scopes},
     )
-    await db.commit()
+    if commit:
+        await db.commit()
     return token, raw
 
 

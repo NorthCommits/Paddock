@@ -12,9 +12,12 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    ApiToken,
     AuditLog,
     Blob,
     Event,
+    OAuthClient,
+    OAuthCode,
     Page,
     PageInvite,
     PageVersion,
@@ -32,6 +35,8 @@ DELETED_PAGE_DAYS = 30  # a deleted page is kept this long, then removed for goo
 BLOB_DAYS = 7  # a file nobody uses is kept this long, then removed from storage
 OLD_ACCESS_DAYS = 30  # invitations and share links that ended
 AUDIT_DAYS = 365
+OAUTH_CODE_DAYS = 1  # sign-in codes that expired or were used
+OAUTH_CLIENT_DAYS = 30  # apps nobody has used and that hold no live token
 
 FIRST_RUN_DELAY = 300  # seconds after start
 EVERY = 24 * 60 * 60
@@ -98,6 +103,31 @@ async def purge_audit(db: AsyncSession) -> int:
     return result.rowcount
 
 
+async def purge_oauth(db: AsyncSession) -> int:
+    """Remove old sign-in codes, and apps that are unused and hold no live token."""
+    codes = await db.execute(
+        delete(OAuthCode).where(
+            (OAuthCode.expires_at < _ago(OAUTH_CODE_DAYS))
+            | (OAuthCode.used_at < _ago(OAUTH_CODE_DAYS))
+        )
+    )
+    now = datetime.now(UTC)
+    live = select(ApiToken.client_id).where(
+        ApiToken.client_id.is_not(None),
+        ApiToken.revoked_at.is_(None),
+        (ApiToken.expires_at.is_(None)) | (ApiToken.expires_at > now),
+    )
+    clients = await db.execute(
+        delete(OAuthClient).where(
+            func.coalesce(OAuthClient.last_used_at, OAuthClient.created_at)
+            < _ago(OAUTH_CLIENT_DAYS),
+            OAuthClient.client_id.not_in(live),
+        )
+    )
+    await db.commit()
+    return codes.rowcount + clients.rowcount
+
+
 async def purge_unused_blobs(db: AsyncSession) -> int:
     """Delete files no version uses. Rows go first, so a row never points at a missing file."""
     rows = (
@@ -129,6 +159,7 @@ async def run() -> dict[str, int]:
         ("events", purge_old_events),
         ("access", purge_old_access),
         ("audit", purge_audit),
+        ("oauth", purge_oauth),
         ("blobs", purge_unused_blobs),  # after pages, which frees files
     )
     counts: dict[str, int] = {}

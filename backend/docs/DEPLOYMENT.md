@@ -43,6 +43,7 @@ python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 | `SECRET_KEY` | yes | Must match |
 | `APP_ORIGIN` | yes | The Vercel address, no trailing slash |
 | `CONTENT_ORIGIN` | yes | The content service address |
+| `API_PUBLIC_URL` | yes | The public address of the API itself, no trailing slash. Connecting apps (Claude, ChatGPT, Claude Code, Codex) use it as the sign-in server and MCP address, so a wrong value breaks connecting |
 | `S3_BUCKET`, `S3_ENDPOINT_URL`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | yes | File storage |
 | `ENVIRONMENT` | yes | `production` (already in the Blueprint) |
 | `PROXY_HOPS` | API | Number of proxies adding to `X-Forwarded-For`. On Render, `2` (Render's edge and its proxy; already in the Blueprint) |
@@ -69,6 +70,7 @@ Import the repository with the `frontend` folder as the root. Set:
 | `BACKEND_URL` | The API address on Render |
 | `NEON_AUTH_BASE_URL` | The same value as `NEON_AUTH_URL` |
 | `NEON_AUTH_COOKIE_SECRET` | A random string of 32 or more characters |
+| `NEXT_PUBLIC_MCP_URL` | The address people paste into their AI app: the API address followed by `/mcp`, for example `https://paddock-api-xxxx.onrender.com/mcp`. It must match `API_PUBLIC_URL` |
 
 The frontend forwards `/api/*` to the API, so people and the CLI can use the Vercel address.
 
@@ -77,6 +79,17 @@ The frontend forwards `/api/*` to the API, so people and the CLI can use the Ver
 1. Open the frontend, sign up, and choose a handle.
 2. Create a token in Settings and run `paddock login` then `paddock deploy` (see `cli/README.md`).
 3. Open the page, leave a comment with `@agent`, and watch it arrive with `paddock watch`.
+
+## Connecting apps by signing in
+
+People connect Claude Desktop, ChatGPT, Claude Code or Codex by pasting one address and clicking Allow on a Paddock page. This needs two settings and one rule:
+
+- `API_PUBLIC_URL` on the API service and `NEXT_PUBLIC_MCP_URL` on Vercel must both point at the same API host. `NEXT_PUBLIC_MCP_URL` is that host plus `/mcp`.
+- The address people paste is the API host, not the Vercel address. The API serves `/mcp`, `/oauth/*` and `/.well-known/*` at its root. The consent page itself lives on the Vercel site.
+- The address stays valid only while the API host does. Apps remember the address and the access they were given. If you move the API to a new host, every connected app must be connected again, so treat the API host as permanent.
+- `PROXY_HOPS` must be right (see above). App registration is rate limited per caller address, and a wrong value makes everyone share one limit.
+
+To check it after deploying, open `https://<api host>/.well-known/oauth-protected-resource/mcp` in a browser (it should show `resource` ending in `/mcp`), then follow `docs/MANUAL-CONNECT-CHECKLIST.md` with each real app.
 
 ## Running with Docker instead
 
@@ -118,7 +131,7 @@ check the health command before relying on it.
 A job removes old data once a day in the API process (first run five minutes after start).
 Run it by hand with `python -m app.jobs retention`. What it removes: events and delivery history
 older than 30 days, ended invitations and links older than 30 days, pages deleted over 30 days
-ago, files no version uses for 7 days, and audit entries over a year old.
+ago, files no version uses for 7 days, and audit entries over a year old. It also removes sign-in codes a day after they expire or are used, and apps that registered to connect but have not been used for 30 days and hold no live token.
 
 ## Rotating secrets
 

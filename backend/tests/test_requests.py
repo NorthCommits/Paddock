@@ -74,9 +74,14 @@ async def test_requests_on_other_peoples_private_pages_are_hidden(client):
             f"/v1/pages/{page_id}", json={"visibility": "private"}, headers=auth(data)
         )
         assert (await bo.get("/v1/requests", headers=auth(token=bo_token))).json()["items"] == []
-        assert (
-            await act(bo, await ask(client, data, page_id), "claim", bo_token)
-        ).status_code == 404
+        hidden = await ask(client, data, page_id)
+        claimed = await act(bo, hidden, "claim", bo_token)
+        assert claimed.status_code == 404
+        # The same answer as an id that does not exist, so the request stays secret.
+        assert claimed.json()["error"]["message"] == "Request not found"
+        read = await bo.get(f"/v1/requests/{hidden}", headers=auth(token=bo_token))
+        assert read.status_code == 404
+        assert read.json()["error"]["message"] == "Request not found"
 
 
 # ------------------------------------------------------------ claim

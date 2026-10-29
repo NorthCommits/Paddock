@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     secret_key: str = DEV_SECRET
     app_origin: str = "http://localhost:3000"
     content_origin: str = "http://localhost:8001"
+    # The API's own public address. It is the OAuth issuer and the host of the MCP address.
+    api_public_url: str = "http://localhost:8000"
 
     # Upload limits (see SDD section 5.1)
     max_bundle_bytes: int = 25 * 1024 * 1024
@@ -66,6 +68,12 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_security: str = "starttls"  # starttls, ssl or none
+
+    @property
+    def max_request_bytes(self) -> int:
+        """The largest request body accepted: a full bundle base64 encoded, plus room for the
+        other fields. Used by the API middleware and the MCP endpoint."""
+        return self.max_bundle_bytes * 2 + 2 * 1024 * 1024
 
     @property
     def migration_url(self) -> str:
