@@ -124,6 +124,21 @@ Public link pages are not indexed by search engines.
 - A saved Claude Code task token is encrypted at rest, never returned by the API, and only the
   official `api.anthropic.com` task address is accepted. The text sent to it is treated as data.
 
+### 11. Presence and page chat
+
+- Both are for signed-in people only. Agent tokens are refused on every presence and chat route and
+  never receive their live events.
+- Live presence and chat events are never stored and never become webhook deliveries. They go out
+  once on the page stream, and access to the page is checked again on every event.
+- A private message is visible only to its sender and its recipient. The page owner cannot read it.
+  The recipient must have access to the page, and a person cannot message themselves.
+- Everyone with access to the page, viewers included, can read and write the page chat. A stranger
+  gets the same "not found" as for any other page route.
+- Messages are limited to 1000 characters and 20 a minute for each person, and are deleted after
+  30 days. A deleted message keeps no text.
+- A private message never sends email. It adds a bell notification only when the recipient is not on
+  the page at that moment.
+
 ## Other findings
 
 - **Errors.** Error bodies use a fixed shape with a request id. Stack traces are not returned.

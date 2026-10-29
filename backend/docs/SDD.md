@@ -65,6 +65,12 @@ id, webhook_id, event_id, status (`pending`, `delivered`, `failed`), attempts, n
 **audit_log**
 id, user_id, token_id, action, target_type, target_id, metadata (JSON), ip, created_at
 
+**page_presence**
+page_id, user_id, last_seen_at (primary key on page and user). Someone counts as here for 45 seconds after their last heartbeat.
+
+**page_messages**
+id, page_id, sender_id, recipient_id (null means everyone on the page), body, created_at, deleted_at (soft delete). Kept 30 days.
+
 ### 2.2 Important indexes
 
 - `pages (owner_id, slug)` unique.
@@ -191,6 +197,18 @@ Visibility is a ceiling: `private` is the owner only (members and links stay sto
 | DELETE /v1/webhooks/{id} | Remove a webhook and its deliveries. |
 | POST /v1/webhooks/{id}/test | Send a `webhook.test` event once and report the answer. |
 | GET /v1/webhooks/{id}/deliveries | Recent deliveries with status, attempts and errors. |
+
+### 4.5a Presence and page chat
+| Method and path | Purpose |
+|---|---|
+| POST /v1/pages/{id}/presence | Heartbeat: the person has the page open. People only. |
+| DELETE /v1/pages/{id}/presence | The person left the page. |
+| GET /v1/pages/{id}/people | Everyone with access, with `here` true for those on the page now. |
+| GET /v1/pages/{id}/messages | The page chat, or the private thread with `?with=<person>`. 50 at a time, `before` pages back. |
+| POST /v1/pages/{id}/messages | Send to everyone, or privately with `to`. Limited to 20 a minute. |
+| DELETE /v1/messages/{id} | The sender, or the page owner for page-wide messages. |
+
+Events `presence.changed`, `message.created` and `message.deleted` are live only: not stored, no webhooks, people only.
 
 ### 4.6 Operations
 | Method and path | Purpose |
