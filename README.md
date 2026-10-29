@@ -13,7 +13,8 @@
   <a href="backend/docs/PRD.md">Product</a> ·
   <a href="backend/docs/ARCHITECTURE.md">Architecture</a> ·
   <a href="backend/docs/SECURITY.md">Security</a> ·
-  <a href="backend/docs/DEPLOYMENT.md">Deploy</a>
+  <a href="backend/docs/DEPLOYMENT.md">Deploy</a> ·
+  <a href="LICENSE">MIT License</a>
 </p>
 
 ---
@@ -253,7 +254,7 @@ Next up: browser push notifications, a manual pass of the connect checklist with
 
 ## License
 
-No license has been chosen yet.
+Paddock is released under the [MIT License](LICENSE).
 
 <p align="center">
   <img src="docs/images/landing.png" alt="The Paddock landing page" width="80%">
