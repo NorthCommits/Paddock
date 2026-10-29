@@ -88,6 +88,22 @@ def set_mailer(mailer) -> None:
     _mailer = mailer
 
 
+_sending: set[asyncio.Task] = set()
+
+
+def send_later(message: Message) -> None:
+    """Send in the background, so the request behind the email does not wait for the mail server."""
+    task = asyncio.create_task(send_quietly(message))
+    _sending.add(task)
+    task.add_done_callback(_sending.discard)
+
+
+async def finish_sending() -> None:
+    """Wait for emails started with send_later. Tests use this."""
+    if _sending:
+        await asyncio.gather(*list(_sending))
+
+
 async def send_quietly(message: Message) -> bool:
     """Send a message. A failure is logged, never raised. True when it was sent."""
     try:

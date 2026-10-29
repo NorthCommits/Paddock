@@ -6,6 +6,7 @@ export type User = {
   created_at: string;
   email_verified_at: string | null;
   theme: "system" | "light" | "dark";
+  notify_requests: boolean;
 };
 
 export type Me = { user: User; scopes: string[] };
@@ -256,7 +257,14 @@ export function oauthApprove(body: OAuthRequest, decision: "allow" | "deny"): Pr
 
 export type RequestStatus = "open" | "claimed" | "done" | "dismissed";
 
-export type CommentAuthor = { user_id: string | null; handle: string | null; display_name: string | null; by_agent: boolean };
+export type CommentAuthor = {
+  user_id: string | null;
+  handle: string | null;
+  display_name: string | null;
+  by_agent: boolean;
+  /** For an agent: whose it is and which app, such as "Swapnil's Claude". */
+  agent_label?: string | null;
+};
 
 export type RequestInfo = {
   id: string;

@@ -47,6 +47,7 @@ class UserOut(BaseModel):
     created_at: datetime
     email_verified_at: datetime | None
     theme: str
+    notify_requests: bool
 
 
 class MeOut(BaseModel):
@@ -89,6 +90,7 @@ class TokenCreatedOut(TokenOut):
 class ProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=100)
     theme: Literal["system", "light", "dark"] | None = None
+    notify_requests: bool | None = None
 
     @field_validator("display_name")
     @classmethod
@@ -102,6 +104,6 @@ class ProfileUpdate(BaseModel):
 
     @model_validator(mode="after")
     def _something_to_change(self) -> "ProfileUpdate":
-        if self.display_name is None and self.theme is None:
-            raise ValueError("send a display_name or a theme")
+        if self.display_name is None and self.theme is None and self.notify_requests is None:
+            raise ValueError("send a display_name, a theme or notify_requests")
         return self

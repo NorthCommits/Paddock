@@ -55,11 +55,11 @@ export default function PageViewer() {
   const [draft, setDraft] = useState<Anchor | null>(null);
   const [activeThread, setActiveThread] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ anchor: Anchor; key: number } | null>(null);
-  const open = useThreads(id, "open");
+  const threads = useThreads(id);
   const marks = useMemo(() => {
-    const numbers = markNumbers(open.data?.items);
-    return (open.data?.items ?? []).flatMap((t) => (t.anchor && numbers.has(t.id) ? [{ id: t.id, n: numbers.get(t.id)!, anchor: t.anchor }] : []));
-  }, [open.data]);
+    const numbers = markNumbers(threads.data?.items);
+    return (threads.data?.items ?? []).flatMap((t) => (t.anchor && numbers.has(t.id) ? [{ id: t.id, n: numbers.get(t.id)!, anchor: t.anchor }] : []));
+  }, [threads.data]);
 
   // Changes made by other people or by an agent arrive here at once, so the screen stays current.
   const { mutate: refetch } = useSWRConfig();

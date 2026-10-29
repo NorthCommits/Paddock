@@ -119,11 +119,14 @@ async def update_profile(
     display_name: str | None,
     ip: str | None,
     theme: str | None = None,
+    notify_requests: bool | None = None,
 ) -> User:
     if display_name is not None:
         user.display_name = display_name
     if theme is not None:
         user.theme = theme
+    if notify_requests is not None:
+        user.notify_requests = notify_requests
     audit.record(db, action="user.update_profile", user_id=user.id, ip=ip)
     await db.commit()
     return user

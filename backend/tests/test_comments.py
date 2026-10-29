@@ -2,7 +2,7 @@ import pytest
 
 from app.services.comments import mentions_agent
 
-from .helpers import auth, make_token, new_page, signup
+from .helpers import auth, mails_to, make_token, new_page, signup
 from .test_sharing import BO, join, other
 
 
@@ -310,3 +310,64 @@ async def test_resolve_and_reopen_a_thread(client):
 
     bad = await client.post(f"/v1/comments/{reply['id']}/resolve", headers=auth(data))
     assert bad.status_code == 422
+
+
+# ------------------------------------------------------------ agent names and emails
+
+
+async def waiting_mails(email):
+    from app.services import mailer
+
+    await mailer.finish_sending()
+    return [m for m in mails_to(email) if "waiting on your agent" in m.subject]
+
+
+async def test_a_comment_from_an_agent_is_named_after_its_owner_and_app(client):
+    data, page_id = await setup(client)
+    writer = (await make_token(client, data, scopes=("comments:write",), name="Claude"))["token"]
+    made = await client.post(
+        f"/v1/pages/{page_id}/comments", json={"body": "Done"}, headers=auth(token=writer)
+    )
+    assert made.json()["author"]["agent_label"].endswith("'s Claude")
+    listed = await client.get(f"/v1/pages/{page_id}/comments", headers=auth(data))
+    thread = listed.json()["items"][0]
+    assert thread["author"]["agent_label"] == made.json()["author"]["agent_label"]
+    person = await comment(client, data, page_id, "Mine")
+    assert person.json()["author"]["agent_label"] is None
+
+
+async def test_owner_is_emailed_once_while_a_colleague_waits_on_their_agent(client):
+    data, page_id = await setup(client)
+    bo = other()
+    bo_data, _ = await share(client, data, page_id, bo, "commenter")
+    anchor = {"v": 1, "quote": "Launch in spring.", "tag": "p", "selector": "p"}
+    first = await comment(bo, bo_data, page_id, "@agent make it summer", anchor=anchor)
+    assert first.status_code == 201
+    mails = await waiting_mails("ana@example.com")
+    assert len(mails) == 1
+    assert "Launch in spring." in mails[0].text
+    assert f"/pages/{page_id}" in mails[0].text
+    assert "Check Paddock for open requests" in mails[0].text
+    await comment(bo, bo_data, page_id, "@agent and also the footer")
+    assert len(await waiting_mails("ana@example.com")) == 1  # already told
+    await bo.aclose()
+
+
+async def test_no_email_for_the_owners_own_mention_or_when_switched_off(client):
+    data, page_id = await setup(client)
+    await comment(client, data, page_id, "@agent tighten this")
+    assert await waiting_mails("ana@example.com") == []
+
+    bo = other()
+    bo_data, _ = await share(client, data, page_id, bo, "commenter")
+    off = await client.patch("/v1/me", json={"notify_requests": False}, headers=auth(data))
+    assert off.status_code == 200 and off.json()["notify_requests"] is False
+    await comment(bo, bo_data, page_id, "@agent hello")
+    assert await waiting_mails("ana@example.com") == []
+    await bo.aclose()
+
+
+async def test_notify_requests_defaults_on_and_shows_in_me(client):
+    data = await signup(client)
+    me = await client.get("/v1/me", headers=auth(data))
+    assert me.json()["user"]["notify_requests"] is True
