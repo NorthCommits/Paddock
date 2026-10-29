@@ -28,7 +28,7 @@ export function Avatar({ person, me, className }: { person: Person; me?: boolean
 }
 
 /** The people looking at this page right now, you first. */
-export function PresenceRow({ pageId, meId }: { pageId: string; meId?: string }) {
+export function PresenceRow({ pageId, meId, onPick }: { pageId: string; meId?: string; onPick?: (id: string) => void }) {
   const people = useSWR(["people", pageId], () => api<{ items: Person[] }>(`/v1/pages/${pageId}/people`), {
     refreshInterval: 30_000,
     shouldRetryOnError: false,
@@ -40,9 +40,22 @@ export function PresenceRow({ pageId, meId }: { pageId: string; meId?: string })
   const extra = here.length - shown.length;
   return (
     <div role="group" aria-label={`${here.length} here now`} className="flex items-center -space-x-1.5">
-      {shown.map((p) => (
-        <Avatar key={p.id} person={p} me={p.id === meId} />
-      ))}
+      {shown.map((p) =>
+        onPick && p.id !== meId ? (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onPick(p.id)}
+            aria-label={`Chat with ${p.display_name || p.handle}`}
+            title={`Chat with ${p.display_name || p.handle}`}
+            className="rounded-full transition-transform hover:z-10 hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+          >
+            <Avatar person={p} />
+          </button>
+        ) : (
+          <Avatar key={p.id} person={p} me={p.id === meId} />
+        ),
+      )}
       {extra > 0 && (
         <span
           title={here.slice(MAX).map((p) => p.display_name || `@${p.handle}`).join(", ")}

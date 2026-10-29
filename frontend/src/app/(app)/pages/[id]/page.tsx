@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { AddAgentHint } from "@/components/add-agent-hint";
+import { ChatBubble } from "@/components/chat-bubble";
 import { CommentsPanel, markNumbers, useThreads } from "@/components/comments-panel";
 import { PageFrame } from "@/components/page-frame";
 import { PresenceRow } from "@/components/presence-row";
@@ -19,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, ROLE_LABEL, api, fetchMe } from "@/lib/api";
 import type { Anchor, Page, Publish, Version, VersionList, ViewUrl } from "@/lib/api";
 import { ago, bytes } from "@/lib/format";
+import { useChat } from "@/lib/chat";
 import { useLive } from "@/lib/live";
 import { usePresence } from "@/lib/presence";
 import { cn } from "@/lib/utils";
@@ -40,6 +42,8 @@ export default function PageViewer() {
   const [leaving, setLeaving] = useState(false);
   const me = useSWR("me", fetchMe);
   usePresence(id);
+  const meId = me.data?.user.id ?? "";
+  const chat = useChat(id, meId);
   const [deleting, setDeleting] = useState(false);
   const [rollback, setRollback] = useState<Version | null>(null);
   const [notice, setNotice] = useState("");
@@ -68,6 +72,7 @@ export default function PageViewer() {
   // Changes made by other people or by an agent arrive here at once, so the screen stays current.
   const { mutate: refetch } = useSWRConfig();
   useLive(`/v1/pages/${id}/events`, (e) => {
+    chat.onEvent(e);
     const comments = () => refetch((k) => Array.isArray(k) && k[0] === "comments" && k[1] === id);
     const people = () => refetch((k) => Array.isArray(k) && k[0] === "people" && k[1] === id);
     if (e === "resync") {
@@ -156,7 +161,15 @@ export default function PageViewer() {
         {p && <Badge variant={old ? "neutral" : "success"}>{old ? `Viewing v${shown}` : `v${current}`}</Badge>}
         {p && !isOwner && <Badge>{ROLE_LABEL[p.role]}</Badge>}
         <span className="flex-1" />
-        {p && <PresenceRow pageId={id} meId={me.data?.user.id} />}
+        {p && <PresenceRow
+            pageId={id}
+            meId={meId}
+            onPick={(who) => {
+              chat.select(who);
+              chat.setMinimised(false);
+              chat.setOpen(true);
+            }}
+          />}
         <AddAgentHint />
         {old && canEdit && (
           <Button size="sm" variant="secondary" onClick={() => shownVersion && setRollback(shownVersion)}>
@@ -231,6 +244,7 @@ export default function PageViewer() {
               onMissing={() => setNotice("That part is not in this version.")}
             />
           )}
+          {p && meId && <ChatBubble chat={chat} pageId={id} meId={meId} />}
           <AnimatePresence>
             {notice && (
               <motion.p
