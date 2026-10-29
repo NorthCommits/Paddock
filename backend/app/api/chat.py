@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -18,7 +17,7 @@ async def list_messages(
     db: DbDep,
     actor: PersonDep,
     with_id: Annotated[uuid.UUID | None, Query(alias="with")] = None,
-    before: datetime | None = None,
+    before: uuid.UUID | None = None,
 ):
     page = await pages.get_for_actor(db, actor, page_id, "page.view")
     items, more = await chat.list_messages(db, page, actor.user, with_id, before)

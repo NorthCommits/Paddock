@@ -191,7 +191,7 @@ async def test_pages_of_50_newest_come_oldest_first(client):
     first = await thread(client, data, page_id)
     assert len(first["items"]) == 50 and first["more"] is True
     assert first["items"][0]["body"] == "m5" and first["items"][-1]["body"] == "m54"
-    older = await thread(client, data, page_id, before=first["items"][0]["created_at"])
+    older = await thread(client, data, page_id, before=first["items"][0]["id"])
     assert [m["body"] for m in older["items"]] == ["m0", "m1", "m2", "m3", "m4"]
     assert older["more"] is False
 
@@ -210,3 +210,27 @@ async def test_retention_removes_messages_older_than_30_days(client):
         await db.commit()
         assert await retention.purge_old_messages(db) == 1
     assert [m["body"] for m in (await thread(client, data, page_id))["items"]] == ["new"]
+
+
+async def test_paging_back_does_not_skip_messages_sharing_a_timestamp(client):
+    data, page_id = await setup(client)
+    for n in range(55):
+        await say(client, data, page_id, f"m{n}")
+    async with AsyncSession(get_engine()) as db:
+        await db.execute(text("update page_messages set created_at = now()"))
+        await db.commit()
+    first = await thread(client, data, page_id)
+    older = await thread(client, data, page_id, before=first["items"][0]["id"])
+    seen = [m["body"] for m in older["items"] + first["items"]]
+    assert sorted(seen) == sorted(f"m{n}" for n in range(55))
+
+
+async def test_deleting_a_private_message_removes_its_bell_item(client):
+    data, page_id = await setup(client)
+    bo, bo_data = await member(client, data, page_id, "bo@example.com", "bobby", "viewer")
+    sent = (await say(bo, bo_data, page_id, "oops wrong chat", to=data["user"]["id"])).json()
+    assert len((await client.get("/v1/notifications", headers=auth(data))).json()["items"]) == 1
+    assert (await bo.delete(f"/v1/messages/{sent['id']}", headers=auth(bo_data))).status_code == 204
+    items = (await client.get("/v1/notifications", headers=auth(data))).json()["items"]
+    assert items == []
+    await bo.aclose()

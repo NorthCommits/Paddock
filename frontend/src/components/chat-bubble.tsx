@@ -37,9 +37,29 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
     () => api<List>(`/v1/pages/${pageId}/messages${selected ? `?with=${selected}` : ""}`),
     { shouldRetryOnError: false },
   );
-  const items = messages.data?.items ?? [];
+  // Earlier pages are loaded on request and kept apart from the live page, so a refetch never drops them.
+  const [earlier, setEarlier] = useState<{ key: string; items: ChatMessage[]; more: boolean | null }>({ key, items: [], more: null });
+  const older = earlier.key === key ? earlier : { key, items: [], more: null };
+  const latest = messages.data?.items ?? [];
+  const items = [...older.items, ...latest.filter((m) => !older.items.some((o) => o.id === m.id))];
+  const more = older.more ?? messages.data?.more ?? false;
+  const current = useRef(key);
+  current.current = key;
 
-  const [text, setText] = useState("");
+  async function loadEarlier() {
+    if (!items[0]) return;
+    try {
+      const r = await api<List>(`/v1/pages/${pageId}/messages?${new URLSearchParams({ ...(selected ? { with: selected } : {}), before: items[0].id })}`);
+      setEarlier({ key, items: [...r.items, ...older.items], more: r.more });
+    } catch (err) {
+      setError((err as Error).message || "Could not load earlier messages.");
+    }
+  }
+
+  // One draft for each conversation, so text typed for one person never ends up in another chat.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const text = drafts[key] ?? "";
+  const setDraft = (k: string, v: string) => setDrafts((d) => ({ ...d, [k]: v }));
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [announce, setAnnounce] = useState("");
@@ -57,6 +77,7 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
 
   useEffect(() => {
     setError("");
+    seen.current = null;
   }, [key]);
 
   async function send() {
@@ -64,7 +85,7 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
     if (!body || sending) return;
     setSending(true);
     setError("");
-    setText("");
+    setDraft(key, "");
     const mine: ChatMessage = {
       id: `pending-${Date.now()}`,
       sender: { id: meId, handle: "", display_name: "You" },
@@ -79,8 +100,9 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
           const saved = await api<ChatMessage>(`/v1/pages/${pageId}/messages`, { method: "POST", body: { body, to: selected } });
           return { more: cur?.more ?? false, items: [...(cur?.items ?? []), saved] };
         } catch (err) {
-          setText(body);
-          setError((err as Error).message || "Could not send. Try again.");
+          const reason = (err as Error).message || "Could not send. Try again.";
+          setDraft(key, body);
+          setError(current.current === key ? reason : `A message to ${who ? nameOf(who) : "everyone"} was not sent. ${reason}`);
           return cur;
         }
       },
@@ -143,6 +165,11 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
                   {who ? `Only you and ${nameOf(who)} can see this.` : "Everyone with access to this page can see this chat."}
                 </p>
               )}
+              {more && (
+                <button onClick={() => void loadEarlier()} className="mx-auto block text-[12px] text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                  Load earlier messages
+                </button>
+              )}
               {items.map((m) => {
                 const mineMsg = m.sender.id === meId;
                 return (
@@ -179,7 +206,7 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
               <div className="flex items-end gap-2">
                 <textarea
                   value={text}
-                  onChange={(e) => setText(e.target.value)}
+                  onChange={(e) => setDraft(key, e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();

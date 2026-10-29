@@ -7,11 +7,12 @@ as events, so webhooks and agents never see them.
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, tuple_
+from sqlalchemy import delete as sql_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
-from app.db.models import Page, PageMessage, User
+from app.db.models import Notification, Page, PageMessage, User
 from app.schemas.chat import MessageOut, Sender
 from app.services import events, notifications, pages, presence
 
@@ -40,7 +41,7 @@ async def _people(db: AsyncSession, rows: list[PageMessage]) -> dict[uuid.UUID, 
 
 
 async def list_messages(
-    db: AsyncSession, page: Page, user: User, with_id: uuid.UUID | None, before: datetime | None
+    db: AsyncSession, page: Page, user: User, with_id: uuid.UUID | None, before: uuid.UUID | None
 ) -> tuple[list[MessageOut], bool]:
     """The page chat, or the private thread with one person. Newest 50, shown oldest first."""
     query = select(PageMessage).where(PageMessage.page_id == page.id)
@@ -54,7 +55,11 @@ async def list_messages(
             )
         )
     if before is not None:
-        query = query.where(PageMessage.created_at < before)
+        cursor = await db.get(PageMessage, before)
+        if cursor is not None and cursor.page_id == page.id:
+            query = query.where(
+                tuple_(PageMessage.created_at, PageMessage.id) < (cursor.created_at, cursor.id)
+            )
     rows = list(
         await db.scalars(
             query.order_by(PageMessage.created_at.desc(), PageMessage.id.desc()).limit(LIMIT + 1)
@@ -115,6 +120,17 @@ async def delete(db: AsyncSession, actor, message_id: uuid.UUID) -> None:
     ):
         raise AppError(403, "forbidden", "Only the sender can delete this message")
     if message.deleted_at is None:
+        if message.recipient_id is not None:
+            name = actor.user.display_name or f"@{actor.user.handle}"
+            await db.execute(
+                sql_delete(Notification).where(
+                    Notification.user_id == message.recipient_id,
+                    Notification.kind == "chat_message",
+                    Notification.actor_id == message.sender_id,
+                    Notification.page_id == message.page_id,
+                    Notification.body == f"{name}: {message.body[:PREVIEW]}",
+                )
+            )
         message.deleted_at = datetime.now(UTC)
         message.body = ""
         await db.commit()
