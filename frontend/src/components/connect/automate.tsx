@@ -41,7 +41,7 @@ export function Automate() {
           <li>Add an API trigger to it and copy the task address and token.</li>
           <li>Paste them under Settings, Wake my agent. Saying yes to a request then starts the task at once.</li>
         </ol>
-        <CopyField label="task prompt" value={PROMPT} />
+        <CopyField wrap label="task prompt" value={PROMPT} />
         <details className="text-[13px] text-muted-foreground">
           <summary className="cursor-pointer text-foreground">What Paddock sends when you say yes</summary>
           <div className="mt-2">
@@ -53,7 +53,7 @@ export function Automate() {
         <p className="text-[13px] text-muted-foreground">
           In the Codex app, add an automation with a schedule such as every 15 minutes, and use this prompt.
         </p>
-        <CopyField label="automation prompt" value={PROMPT} />
+        <CopyField wrap label="automation prompt" value={PROMPT} />
       </Recipe>
       <Recipe title="Small runner script" when="Any agent that reads a prompt from the command line. Runs wherever you leave it.">
         <p className="text-[13px] text-muted-foreground">
