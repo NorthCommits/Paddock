@@ -25,6 +25,7 @@ ACTIONS = {
     "page.view": ("viewer", "pages:read"),
     "comment.read": ("viewer", "comments:read"),
     "events.read": ("viewer", "events:read"),
+    "chat.write": ("viewer", "pages:read"),
     "comment.create": ("commenter", "comments:write"),
     "request.create": ("commenter", "comments:write"),
     "version.publish": ("editor", "pages:write"),
