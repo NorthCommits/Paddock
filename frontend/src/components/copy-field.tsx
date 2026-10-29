@@ -20,7 +20,7 @@ export function CopyField({ value, label, wrap = false }: { value: string; label
       <pre
         {...(wrap ? {} : { tabIndex: 0, role: "region", "aria-label": label })}
         className={`min-w-0 flex-1 py-1 pl-1 font-mono text-[12px] leading-[18px] text-foreground ${
-          wrap ? "whitespace-pre-wrap break-all" : "overflow-x-auto whitespace-pre"
+          wrap ? "whitespace-pre-wrap break-words" : "overflow-x-auto whitespace-pre"
         }`}
       >
         {value}
