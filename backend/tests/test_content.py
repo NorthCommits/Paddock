@@ -151,3 +151,48 @@ async def test_health_and_unrelated_routes(content_client):
 
 async def test_the_main_api_has_no_content_routes(client):
     assert (await client.get("/c/abc/index.html")).status_code == 404
+
+
+async def test_html_pages_get_the_helper_script_and_other_files_do_not(client, content_client):
+    page = await make_site(client)
+    url = (await view(client, page["id"])).json()["url"]
+
+    html = await content_client.get(path_of(url))
+    assert 'src="/_paddock/bridge.js"' in html.text
+    assert 'data-app-origin="http://localhost:3000"' in html.text
+    assert html.text.index("Home") < html.text.index("bridge.js")  # after the page's own content
+    assert html.headers["content-length"] == str(len(html.content))
+
+    css = await content_client.get(path_of(url).replace("index.html", "css/site.css"))
+    assert css.text == "h1{color:green}"
+    data = await content_client.get(path_of(url).replace("index.html", "data.json"))
+    assert data.json() == {"ok": True}
+
+
+def test_helper_goes_before_the_closing_body_tag():
+    from app.content import with_bridge
+
+    out = with_bridge(b"<html><body><p>Hi</p></BODY ></html>").decode()
+    assert out.index("<p>Hi</p>") < out.index("bridge.js") < out.index("</BODY >")
+    assert with_bridge(b"<p>no body tag</p>").decode().endswith("</script>")
+
+
+async def test_helper_script_is_served_and_safe_to_cache(content_client):
+    response = await content_client.get("/_paddock/bridge.js")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/javascript")
+    assert "data-app-origin" in response.text
+    assert "public" in response.headers["cache-control"]
+
+
+async def test_healthz_can_be_read_from_the_app(content_client):
+    response = await content_client.get("/healthz")
+    assert response.json() == {"status": "ok"}
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert response.headers["cache-control"] == "no-store"
+
+
+async def test_view_url_says_which_version_it_shows(client):
+    page = await make_site(client)
+    assert (await view(client, page["id"])).json()["version"] == 1
+    assert (await view(client, page["id"], version=1)).json()["version"] == 1

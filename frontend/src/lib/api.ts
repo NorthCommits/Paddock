@@ -116,7 +116,19 @@ export type Page = {
 export type PageList = { items: Page[]; next_cursor: string | null };
 export type VersionList = { items: Version[]; next_cursor: string | null };
 export type Publish = { page: Page; version: Version; created: boolean };
-export type ViewUrl = { url: string; expires_at: string };
+export type ViewUrl = { url: string; expires_at: string; version: number };
+
+// The part of a page a comment is about. The page helper script builds it when someone clicks a part
+// or selects text; the server stores it as sent.
+export type Anchor = {
+  v: 1;
+  kind: "block" | "text";
+  tag: string;
+  quote: string;
+  selector: string;
+  selected?: string;
+  section?: string;
+};
 
 export type TokenCreated = TokenRow & { token: string };
 
@@ -268,6 +280,7 @@ export type CommentItem = {
   deleted: boolean;
   resolved_at: string | null;
   resolved_by: string | null;
+  anchor: Anchor | null;
   request: RequestInfo | null;
 };
 

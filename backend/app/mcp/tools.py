@@ -292,6 +292,10 @@ async def list_comments(
 
     Returns {"comments": [{id, body, author, version_number, anchor, resolved_at, request,
     replies: [...]}]}. Use a thread's id as comment_id in reply_to_comment.
+
+    A comment made by clicking a part of the page has an anchor: {"quote": the text of that
+    part, "selected": the words the person highlighted (may be absent), "tag": its HTML tag,
+    "selector": a CSS path to it}. Change that part and leave the rest of the page alone.
     """
     pid = _id(page_id, "page_id")
     if status not in (None, "open", "resolved"):
