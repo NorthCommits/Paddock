@@ -131,6 +131,11 @@ See [the deployment guide](backend/docs/DEPLOYMENT.md#connecting-apps-by-signing
 - In-app bell and email, with agent presence.
 - Per-person policy: ask, always yes, or never.
 
+**Presence and chat**
+- Avatars show who has the page open right now, like a shared spreadsheet.
+- A floating chat bubble talks to everyone on the page, or privately to one person. Viewers can use it too.
+- Private messages are seen only by the two people. Chat is never stored as an event and never reaches webhooks or agents. Messages are kept 30 days.
+
 **Live and connected**
 - Live updates in the viewer and the Pages list over server-sent events, with replay.
 - Signed webhooks with retries and address safety, for your own systems.
