@@ -1,8 +1,11 @@
 """Revision requests: what an @agent mention asks an agent to do (SDD section 5.4).
 
-open --claim--> claimed --complete--> done
-open or claimed --dismiss--> dismissed
-A claim that runs out goes back to open. This happens whenever requests are read or claimed,
+awaiting --a person says yes--> open --claim--> claimed --complete--> done
+awaiting, open or claimed --dismiss--> dismissed
+A request starts out awaiting when it needs someone's yes (see approvals.py), or open when the
+person who asked uses their own agent. Only the person who said yes has their agent offered the
+request. A claim that runs out goes back to open, and a yes that nobody's agent acts on within half
+an hour is asked for again. This happens whenever requests are read or claimed,
 so it does not depend on a background job staying awake.
 """
 
@@ -13,9 +16,17 @@ from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
-from app.db.models import Comment, Page, PageMember, PageVersion, RevisionRequest
+from app.db.models import (
+    Comment,
+    Page,
+    PageMember,
+    PageVersion,
+    RequestOffer,
+    RevisionRequest,
+    User,
+)
 from app.schemas.comments import RequestComment, RequestItemOut, RequestListOut
-from app.services import audit, events
+from app.services import agents, approvals, audit, events, notifications
 from app.services.comments import (
     author_out,
     comment_created,
@@ -24,6 +35,8 @@ from app.services.comments import (
     version_numbers,
 )
 from app.services.pages import get_for_actor
+
+STALE_YES = timedelta(minutes=30)  # a yes whose agent never started is asked for again
 
 
 def _now() -> datetime:
@@ -40,6 +53,34 @@ async def reopen_expired(db: AsyncSession) -> None:
     )
     for request_id, page_id in result.all():
         await events.emit(db, page_id, "request.reopened", {"request_id": str(request_id)})
+    await _ask_again(db)
+
+
+async def _ask_again(db: AsyncSession) -> None:
+    """A yes that was given in answer to a question, and that no agent has acted on, is asked again.
+
+    A person's own request for their own agent is never asked again, and neither is a standing
+    "auto" yes. Only a yes that won against other people's offers can run out.
+    """
+    stale = await db.scalars(
+        select(RevisionRequest)
+        .join(
+            RequestOffer,
+            and_(
+                RequestOffer.request_id == RevisionRequest.id,
+                RequestOffer.user_id == RevisionRequest.approved_by_user_id,
+                RequestOffer.status == "won",
+            ),
+        )
+        .where(
+            RevisionRequest.status == "open",
+            RevisionRequest.claimed_by_token_id.is_(None),
+            RevisionRequest.approved_at < _now() - STALE_YES,
+        )
+        .with_for_update(of=RevisionRequest, skip_locked=True)
+    )
+    for request in stale:
+        await approvals.release(db, request)
 
 
 async def _items(db: AsyncSession, rows: list[RevisionRequest]) -> list[RequestItemOut]:
@@ -106,6 +147,9 @@ async def list_requests(
             ),
         )
     )
+    if actor.token is not None:
+        # An agent only ever sees what its owner said yes to.
+        query = query.where(RevisionRequest.approved_by_user_id == actor.user.id)
     if status:
         query = query.where(RevisionRequest.status == status)
     if page_id:
@@ -128,6 +172,8 @@ async def get_one(db: AsyncSession, actor, request_id: uuid.UUID) -> RequestItem
     if request is None:
         raise AppError(404, "not_found", "Request not found")
     await _page_for(db, actor, request, "comment.read")
+    if actor.token is not None and request.approved_by_user_id != actor.user.id:
+        raise AppError(404, "not_found", "Request not found")
     return (await _items(db, [request]))[0]
 
 
@@ -177,6 +223,12 @@ async def claim(db: AsyncSession, actor, request_id: uuid.UUID, *, minutes: int,
     request = await _load(db, actor, request_id)
     if request.status in ("done", "dismissed"):
         raise AppError(409, "conflict", f"This request is already {request.status}")
+    if request.status == "awaiting":
+        raise AppError(
+            409, "awaiting_approval", "A person has not said yes to this request yet, so leave it"
+        )
+    if request.approved_by_user_id != actor.user.id:
+        raise AppError(403, "forbidden", "This request was approved for someone else's agent")
     if request.status == "claimed" and request.claimed_by_token_id != actor.token.id:
         raise AppError(409, "conflict", "Another agent has claimed this request")
     request.status = "claimed"
@@ -252,6 +304,16 @@ async def complete(
     await _reply(
         db, actor, request, comment, reply or f"Published version {version.number}.", version.id
     )
+    if request.requested_by and request.requested_by != actor.user.id:
+        notifications.add(
+            db,
+            request.requested_by,
+            "agent_done",
+            page_id=request.page_id,
+            request_id=request.id,
+            actor_id=actor.user.id,
+            body=f"Version {version.number} is live",
+        )
     await events.emit(
         db,
         request.page_id,
@@ -294,6 +356,92 @@ async def dismiss(
         action="request.dismiss",
         user_id=actor.user.id,
         token_id=actor.token.id if actor.token else None,
+        target_type="request",
+        target_id=str(request.id),
+        ip=ip,
+    )
+    await db.commit()
+    return await _one(db, request)
+
+
+def _name(user: User | None) -> str:
+    if user is None:
+        return "Someone"
+    return user.display_name or f"@{user.handle}"
+
+
+async def approve(db: AsyncSession, actor, request_id: uuid.UUID, *, ip: str | None):
+    """A person lets their own agent take this request. The first person to ask wins.
+
+    The request row is locked while we decide, so two people saying yes at the same moment are
+    handled one after the other. The first finds it awaiting and wins. The second finds it already
+    taken and is told by whom. The same person saying yes twice just gets the same answer.
+    """
+    if actor.token is not None:
+        raise AppError(403, "forbidden", "A person says yes to this, not an agent token")
+    request = await _load(db, actor, request_id)
+    me = actor.user
+    if request.status in ("done", "dismissed"):
+        raise AppError(409, "conflict", f"This request is already {request.status}")
+    if request.status != "awaiting":
+        if request.approved_by_user_id == me.id:
+            return await _one(db, request)
+        taker = (
+            await db.get(User, request.approved_by_user_id) if request.approved_by_user_id else None
+        )
+        raise AppError(409, "taken", f"{_name(taker)} got there first")
+    if me.id not in await agents.with_agents(db, [me.id]):
+        raise AppError(409, "no_agent", "Connect an agent first, then say yes")
+    approvals.approve_for(request, me.id)
+    await approvals.close_offers(db, request, me.id)
+    page = await db.get(Page, request.page_id)
+    comment = await db.get(Comment, request.comment_id)
+    requester = await db.get(User, request.requested_by) if request.requested_by else None
+    if requester is not None and requester.id != me.id:
+        notifications.add(
+            db,
+            requester.id,
+            "agent_approved",
+            page_id=request.page_id,
+            request_id=request.id,
+            actor_id=me.id,
+            body=comment.body,
+        )
+    await events.emit(
+        db,
+        request.page_id,
+        "request.approved",
+        {"request_id": str(request.id), "approved_by": me.handle},
+    )
+    audit.record(
+        db,
+        action="request.approve",
+        user_id=me.id,
+        target_type="request",
+        target_id=str(request.id),
+        ip=ip,
+    )
+    await db.commit()
+    await approvals.wake(db, page, request, comment, requester, me.id)
+    return await _one(db, request)
+
+
+async def decline(db: AsyncSession, actor, request_id: uuid.UUID, *, ip: str | None):
+    """A person says their agent will not take this one. It stays open for everyone else."""
+    if actor.token is not None:
+        raise AppError(403, "forbidden", "A person answers this, not an agent token")
+    request = await _load(db, actor, request_id)
+    if request.status != "awaiting":
+        return await _one(db, request)
+    offer = await db.get(RequestOffer, (request.id, actor.user.id))
+    if offer is None:
+        db.add(RequestOffer(request_id=request.id, user_id=actor.user.id, status="declined"))
+    elif offer.status == "offered":
+        offer.status = "declined"
+    audit.record(
+        db,
+        action="request.decline",
+        user_id=actor.user.id,
         target_type="request",
         target_id=str(request.id),
         ip=ip,

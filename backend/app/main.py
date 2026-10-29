@@ -8,7 +8,18 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.routing import Route
 
-from app.api import auth, comments, events, health, pages, sharing, tokens, webhooks
+from app.api import (
+    agent_trigger,
+    auth,
+    comments,
+    events,
+    health,
+    notifications,
+    pages,
+    sharing,
+    tokens,
+    webhooks,
+)
 from app.api import oauth as oauth_api
 from app.core import ratelimit
 from app.core.config import get_settings
@@ -126,6 +137,8 @@ def create_app() -> FastAPI:
     app.include_router(comments.router)
     app.include_router(events.router)
     app.include_router(webhooks.router)
+    app.include_router(notifications.router)
+    app.include_router(agent_trigger.router)
     app.include_router(oauth_api.router)
     # The MCP endpoint answers on /mcp and /mcp/ alike (a mount would redirect one to the other).
     for path in ("/mcp", "/mcp/"):

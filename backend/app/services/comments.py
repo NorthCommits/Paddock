@@ -4,10 +4,9 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
 from app.core.errors import AppError
 from app.db.models import (
     ApiToken,
@@ -15,11 +14,12 @@ from app.db.models import (
     OAuthClient,
     Page,
     PageVersion,
+    RequestOffer,
     RevisionRequest,
     User,
 )
 from app.schemas.comments import AuthorOut, CommentListOut, CommentOut, RequestOut
-from app.services import audit, emails, events, mailer
+from app.services import approvals, audit, events
 from app.services.pages import get_for_actor, role_for
 
 # "@agent" as a whole word, in any case. "@agentic" and "name@agent.com" do not count.
@@ -46,7 +46,13 @@ async def version_numbers(db: AsyncSession, ids: set[uuid.UUID]) -> dict[uuid.UU
     return {row.id: row.number for row in rows}
 
 
-def request_out(r: RevisionRequest, numbers: dict[uuid.UUID, int]) -> RequestOut:
+def request_out(
+    r: RevisionRequest,
+    numbers: dict[uuid.UUID, int],
+    approver: User | None = None,
+    asked: int = 0,
+    my_offer: str | None = None,
+) -> RequestOut:
     return RequestOut(
         id=r.id,
         page_id=r.page_id,
@@ -58,6 +64,9 @@ def request_out(r: RevisionRequest, numbers: dict[uuid.UUID, int]) -> RequestOut
         dismiss_reason=r.dismiss_reason,
         created_at=r.created_at,
         updated_at=r.updated_at,
+        approved_by=(approver.display_name or f"@{approver.handle}") if approver else None,
+        asked=asked,
+        my_offer=my_offer,
     )
 
 
@@ -108,8 +117,13 @@ async def users_by_id(db: AsyncSession, ids: set[uuid.UUID]) -> dict[uuid.UUID, 
     return {u.id: u for u in await db.scalars(select(User).where(User.id.in_(ids)))}
 
 
-async def comment_outs(db: AsyncSession, comments: list[Comment]) -> dict[uuid.UUID, CommentOut]:
-    """Flat output for each comment, keyed by id. Replies are attached by the caller."""
+async def comment_outs(
+    db: AsyncSession, comments: list[Comment], viewer_id: uuid.UUID | None = None
+) -> dict[uuid.UUID, CommentOut]:
+    """Flat output for each comment, keyed by id. Replies are attached by the caller.
+
+    viewer_id is the person looking, so a request can say whether they may say yes to it.
+    """
     ids = {c.id for c in comments}
     users = await users_by_id(
         db,
@@ -129,6 +143,20 @@ async def comment_outs(db: AsyncSession, comments: list[Comment]) -> dict[uuid.U
         version_ids |= {v for v in (r.base_version_id, r.result_version_id) if v}
     numbers = await version_numbers(db, version_ids)
     labels = await agent_labels(db, comments, users)
+    approvers = await users_by_id(
+        db, {r.approved_by_user_id for r in requests.values() if r.approved_by_user_id}
+    )
+    asked: dict[uuid.UUID, int] = {}
+    mine: dict[uuid.UUID, str] = {}
+    if requests:
+        for offer in await db.scalars(
+            select(RequestOffer).where(
+                RequestOffer.request_id.in_([r.id for r in requests.values()])
+            )
+        ):
+            asked[offer.request_id] = asked.get(offer.request_id, 0) + 1
+            if offer.user_id == viewer_id:
+                mine[offer.request_id] = offer.status
 
     out: dict[uuid.UUID, CommentOut] = {}
     for c in comments:
@@ -150,7 +178,15 @@ async def comment_outs(db: AsyncSession, comments: list[Comment]) -> dict[uuid.U
             deleted=gone,
             resolved_at=c.resolved_at,
             resolved_by=users[c.resolved_by].handle if c.resolved_by in users else None,
-            request=request_out(request, numbers) if request and not gone else None,
+            request=request_out(
+                request,
+                numbers,
+                approvers.get(request.approved_by_user_id) if request.approved_by_user_id else None,
+                asked.get(request.id, 0),
+                mine.get(request.id),
+            )
+            if request and not gone
+            else None,
         )
     return out
 
@@ -234,43 +270,6 @@ async def comment_created(
         await request_event(db, page, request, "request.created", comment)
 
 
-async def notify_owner(
-    db: AsyncSession, page: Page, comment: Comment, request: RevisionRequest, author: User
-) -> None:
-    """Email the page's owner that someone is waiting on their agent.
-
-    One email per wait: if other requests are already open on the page, the owner has been told.
-    """
-    if author.id == page.owner_id:
-        return
-    owner = await db.get(User, page.owner_id)
-    if owner is None or not owner.notify_requests:
-        return
-    others = await db.scalar(
-        select(func.count())
-        .select_from(RevisionRequest)
-        .where(
-            RevisionRequest.page_id == page.id,
-            RevisionRequest.id != request.id,
-            RevisionRequest.status.in_(("open", "claimed")),
-        )
-    )
-    if others:
-        return
-    quote = (comment.anchor or {}).get("selected") or (comment.anchor or {}).get("quote")
-    link = f"{get_settings().app_origin.rstrip('/')}/pages/{page.id}"
-    mailer.send_later(
-        emails.agent_request(
-            owner.email,
-            author.display_name or f"@{author.handle}",
-            page.title,
-            comment.body[:300],
-            str(quote)[:120] if quote else None,
-            link,
-        )
-    )
-
-
 async def create(
     db: AsyncSession,
     actor,
@@ -315,6 +314,7 @@ async def create(
         )
         db.add(request)
         await db.flush()
+        routed = await approvals.route(db, page, comment, request, actor.user)
     await comment_created(db, page, comment, request, actor.token is not None)
     audit.record(
         db,
@@ -329,8 +329,8 @@ async def create(
     await db.commit()
     await db.refresh(comment)
     if request is not None:
-        await notify_owner(db, page, comment, request, actor.user)
-    return (await comment_outs(db, [comment]))[comment.id]
+        await approvals.after_commit(db, page, comment, request, actor.user, routed)
+    return (await comment_outs(db, [comment], actor.user.id))[comment.id]
 
 
 async def list_for_page(
@@ -347,7 +347,7 @@ async def list_for_page(
     # A deleted first comment stays as a placeholder while it still has replies.
     has_replies = {c.parent_id for c in rows if c.parent_id and c.deleted_at is None}
     shown = [c for c in rows if c.deleted_at is None or c.id in has_replies]
-    outs = await comment_outs(db, shown)
+    outs = await comment_outs(db, shown, actor.user.id)
     threads: list[CommentOut] = []
     for c in shown:
         if c.parent_id is None:
@@ -372,6 +372,7 @@ async def edit(
         comment.edited_at = _now()
         wants = mentions_agent(body)
         request = await _request_for(db, comment.id)
+        routed = None
         if wants and request is None and comment.author_token_id is None:
             request = RevisionRequest(
                 page_id=page.id,
@@ -381,15 +382,18 @@ async def edit(
             )
             db.add(request)
             await db.flush()
+            routed = await approvals.route(db, page, comment, request, actor.user)
             await request_event(db, page, request, "request.created", comment)
         elif wants and request is not None and request.status == "dismissed":
-            request.status = "open"  # the mention is back, so the request is too
+            # The mention is back, so the request is too, and it is routed afresh.
             request.base_version_id = page.current_version_id
             request.dismiss_reason = None
             request.claimed_by_token_id = None
             request.claim_expires_at = None
+            await approvals.reset(db, request)
+            routed = await approvals.route(db, page, comment, request, actor.user)
             await request_event(db, page, request, "request.created", comment)
-        elif not wants and request is not None and request.status == "open":
+        elif not wants and request is not None and request.status in ("open", "awaiting"):
             request.status = "dismissed"
             request.dismiss_reason = "The mention was removed"
             await events.emit(
@@ -413,7 +417,9 @@ async def edit(
         )
         await db.commit()
         await db.refresh(comment)
-    return (await comment_outs(db, [comment]))[comment.id]
+        if routed is not None and request is not None:
+            await approvals.after_commit(db, page, comment, request, actor.user, routed)
+    return (await comment_outs(db, [comment], actor.user.id))[comment.id]
 
 
 async def delete(db: AsyncSession, actor, comment_id: uuid.UUID, *, ip: str | None) -> None:
@@ -423,7 +429,7 @@ async def delete(db: AsyncSession, actor, comment_id: uuid.UUID, *, ip: str | No
         raise AppError(403, "forbidden", "Only the author, an editor or the owner can delete this")
     comment.deleted_at = _now()
     request = await _request_for(db, comment.id)
-    if request is not None and request.status in ("open", "claimed"):
+    if request is not None and request.status in ("awaiting", "open", "claimed"):
         request.status = "dismissed"
         request.dismiss_reason = "The comment was deleted"
         request.claimed_by_token_id = None

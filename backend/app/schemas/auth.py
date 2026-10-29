@@ -48,6 +48,7 @@ class UserOut(BaseModel):
     email_verified_at: datetime | None
     theme: str
     notify_requests: bool
+    agent_approval: str
 
 
 class MeOut(BaseModel):
@@ -91,6 +92,7 @@ class ProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=100)
     theme: Literal["system", "light", "dark"] | None = None
     notify_requests: bool | None = None
+    agent_approval: Literal["ask", "auto", "never"] | None = None
 
     @field_validator("display_name")
     @classmethod
@@ -104,6 +106,11 @@ class ProfileUpdate(BaseModel):
 
     @model_validator(mode="after")
     def _something_to_change(self) -> "ProfileUpdate":
-        if self.display_name is None and self.theme is None and self.notify_requests is None:
-            raise ValueError("send a display_name, a theme or notify_requests")
+        if (
+            self.display_name is None
+            and self.theme is None
+            and self.notify_requests is None
+            and self.agent_approval is None
+        ):
+            raise ValueError("send a display_name, a theme, notify_requests or agent_approval")
         return self

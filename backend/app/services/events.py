@@ -29,6 +29,8 @@ EVENT_TYPES = (
     "comment.deleted",
     "comment.resolved",
     "request.created",
+    "request.awaiting",
+    "request.approved",
     "request.claimed",
     "request.reopened",
     "request.completed",

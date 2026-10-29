@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useAnswer } from "@/components/notification-bell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import type { Anchor, CommentItem, Me, Role, Thread, ThreadList } from "@/lib/api";
@@ -47,7 +48,11 @@ const AGENT = /((?<![A-Za-z0-9_@])@agent(?![A-Za-z0-9_-]))/i;
 function statusChip(c: CommentItem) {
   const r = c.request;
   if (!r) return null;
-  if (r.status === "open") return <Badge>Waiting for agent</Badge>;
+  if (r.status === "awaiting") {
+    const n = r.asked ?? 0;
+    return <Badge>{n > 0 ? `Waiting for a yes, ${n} asked` : "Waiting for an agent to join"}</Badge>;
+  }
+  if (r.status === "open") return <Badge>{r.approved_by ? `Approved by ${r.approved_by}` : "Waiting for agent"}</Badge>;
   if (r.status === "claimed") return <Badge variant="success">Agent working</Badge>;
   if (r.status === "done") return <Badge variant="success">Done in v{r.result_version}</Badge>;
   return <Badge>Rejected</Badge>;
@@ -336,7 +341,7 @@ function ThreadCard({
   const ref = useRef<HTMLElement>(null);
   const resolved = !!thread.resolved_at;
   const rejected = !resolved && thread.request?.status === "dismissed";
-  const live = thread.request && thread.request.id !== "sending" && (thread.request.status === "open" || thread.request.status === "claimed");
+  const live = thread.request && thread.request.id !== "sending" && (thread.request.status === "awaiting" || thread.request.status === "open" || thread.request.status === "claimed");
   const all = [thread, ...thread.replies];
 
   useEffect(() => {
@@ -376,6 +381,7 @@ function ThreadCard({
         )}
       </div>
       {resolved && thread.resolved_by && <p className="mt-1 text-[13px] text-muted-foreground">Resolved by @{thread.resolved_by}</p>}
+      {thread.request?.status === "awaiting" && thread.request.my_offer === "offered" && <AskRow requestId={thread.request.id} />}
       {rejected && thread.request?.dismiss_reason && (
         <p className="mt-1 text-[13px] text-muted-foreground">Rejected: {thread.request.dismiss_reason}</p>
       )}
@@ -603,6 +609,37 @@ function Composer({
         {onCancel && <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>}
         <Button size="sm" onClick={send} disabled={empty || busy}>{label === "Comment" ? "Send" : label === "Reply" ? "Reply" : "Save"}</Button>
       </div>
+    </div>
+  );
+}
+
+// Shown to a person whose agent was asked to take this request. Their yes is what lets it start.
+function AskRow({ requestId }: { requestId: string }) {
+  const answer = useAnswer();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  async function go(yes: boolean) {
+    setBusy(true);
+    const m = await answer(requestId, yes);
+    setNote(m ? m.text : "");
+    setBusy(false);
+  }
+  return (
+    <div className="mt-2 rounded-md border border-border bg-muted/50 p-2.5">
+      <p className="text-[13px] text-foreground">Should your agent work on this?</p>
+      <div className="mt-2 flex items-center gap-2">
+        <Button size="sm" disabled={busy} onClick={() => void go(true)}>
+          Let my agent do it
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void go(false)}>
+          Not now
+        </Button>
+      </div>
+      {note && (
+        <p role="alert" className="mt-1.5 text-[12px] text-destructive">
+          {note}
+        </p>
+      )}
     </div>
   );
 }

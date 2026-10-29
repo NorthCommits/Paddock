@@ -68,13 +68,18 @@ class RequestOut(BaseModel):
     id: uuid.UUID
     page_id: uuid.UUID
     comment_id: uuid.UUID
-    status: Literal["open", "claimed", "done", "dismissed"]
+    status: Literal["awaiting", "open", "claimed", "done", "dismissed"]
     base_version: int | None
     result_version: int | None
     claim_expires_at: datetime | None
     dismiss_reason: str | None
     created_at: datetime
     updated_at: datetime
+    # Who said yes to their agent taking this, how many people were asked, and what this viewer
+    # was asked (offered, declined, won or lost). All empty when it does not apply.
+    approved_by: str | None = None
+    asked: int = 0
+    my_offer: str | None = None
 
 
 class CommentOut(BaseModel):

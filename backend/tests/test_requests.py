@@ -61,10 +61,10 @@ async def test_listing_needs_a_scope_and_can_filter(client):
 
 async def test_requests_on_other_peoples_private_pages_are_hidden(client):
     data, page_id = await setup(client)
-    await ask(client, data, page_id)
     async with other() as bo:
         bo_data, _ = await share(client, data, page_id, bo, "editor")
         bo_token = await agent(bo, bo_data)
+        await ask(bo, bo_data, page_id)  # Bo's own request, so Bo's own agent
         # Page is shared with members, so Bo's agent sees it.
         assert (
             len((await bo.get("/v1/requests", headers=auth(token=bo_token))).json()["items"]) == 1

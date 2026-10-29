@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Field } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WakeAgent } from "@/components/wake-agent";
 import { ApiError, api, fetchMe } from "@/lib/api";
 import { signOutNow } from "@/lib/auth/session";
 import type { User } from "@/lib/api";
@@ -51,6 +52,19 @@ export default function Page() {
       await api<User>("/v1/me", { method: "PATCH", body: { notify_requests: on } });
     } catch (err) {
       setNotifyError(err instanceof ApiError ? err.message : "Could not save. Try again.");
+      await mutate();
+    }
+  }
+
+  const [approvalError, setApprovalError] = useState("");
+  async function setApproval(value: User["agent_approval"]) {
+    if (!me) return;
+    setApprovalError("");
+    await mutate({ ...me, user: { ...me.user, agent_approval: value } }, { revalidate: false });
+    try {
+      await api<User>("/v1/me", { method: "PATCH", body: { agent_approval: value } });
+    } catch (err) {
+      setApprovalError(err instanceof ApiError ? err.message : "Could not save. Try again.");
       await mutate();
     }
   }
@@ -132,6 +146,37 @@ export default function Page() {
           </span>
         </label>
         {notifyError && <p role="alert" className="mt-2 text-[13px] text-destructive">{notifyError}</p>}
+      </Section>
+
+      <Section title="Your agent and colleagues" hint="When a colleague asks for an agent, yours only starts if you say yes.">
+        <div role="radiogroup" aria-label="When a colleague asks for an agent" className="space-y-2">
+          {(
+            [
+              ["ask", "Ask me each time", "You get a notification and choose. This is the safest choice."],
+              ["auto", "Always say yes", "Your agent may take any request on pages where you can edit."],
+              ["never", "Leave my agent out", "Your agent is never offered a colleague's request."],
+            ] as const
+          ).map(([id, title, text]) => (
+            <label key={id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-4 shadow-card">
+              <input
+                type="radio"
+                name="agent-approval"
+                checked={me.user.agent_approval === id}
+                onChange={() => void setApproval(id)}
+                className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
+              />
+              <span>
+                <span className="block text-[14px] font-medium text-foreground">{title}</span>
+                <span className="mt-0.5 block text-[13px] text-muted-foreground">{text}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        {approvalError && <p role="alert" className="mt-2 text-[13px] text-destructive">{approvalError}</p>}
+      </Section>
+
+      <Section title="Wake my agent" hint="Optional. Start your Claude Code task the moment you say yes, so it does not wait for its next check.">
+        <WakeAgent />
       </Section>
 
       <Section title="Session">
