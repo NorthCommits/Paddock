@@ -113,12 +113,34 @@ export function ShareSheet({
     await Promise.all([members.mutate(), invites.mutate(), links.mutate(), onPageChanged()]);
   };
 
-  const setVisibility = (v: Visibility) =>
-    run("visibility", async () => {
+  // The choice shows at once. The save happens behind it, and a failure puts the old choice back.
+  const [chosen, setChosen] = useState<Visibility | null>(null);
+  const setVisibility = async (v: Visibility) => {
+    setChosen(v);
+    setError("");
+    try {
       await api(base, { method: "PATCH", body: { visibility: v } });
       setNotice("");
       await onPageChanged();
-    });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
+    } finally {
+      setChosen(null);
+    }
+  };
+
+  // Lists change on screen first and are fetched again afterwards, which also undoes a failed change.
+  async function quickly<T>(list: { mutate: (...a: never[]) => unknown } & { data?: T[] }, change: (rows: T[]) => T[], call: () => Promise<unknown>) {
+    const mutate = list.mutate as unknown as (data?: unknown, opts?: unknown) => Promise<unknown>;
+    await mutate((rows?: T[]) => (rows ? change(rows) : rows), { revalidate: false });
+    try {
+      setError("");
+      await call();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
+    }
+    await mutate();
+  }
 
   const sendInvite = (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,30 +173,22 @@ export function ShareSheet({
     });
 
   const changeRole = (m: Member, role: MemberRole) =>
-    run(`role-${m.user_id}`, async () => {
-      await api(`${base}/members/${m.user_id}`, { method: "PATCH", body: { role } });
-      await members.mutate();
-    });
+    quickly(members, (rows) => rows.map((x) => (x.user_id === m.user_id ? { ...x, role } : x)), () =>
+      api(`${base}/members/${m.user_id}`, { method: "PATCH", body: { role } }),
+    );
 
   const removeMember = (m: Member) =>
-    run(`rm-${m.user_id}`, async () => {
-      await api(`${base}/members/${m.user_id}`, { method: "DELETE" });
-      await members.mutate();
-    });
+    quickly(members, (rows) => rows.filter((x) => x.user_id !== m.user_id), () =>
+      api(`${base}/members/${m.user_id}`, { method: "DELETE" }),
+    );
 
   const revokeInvite = (i: Invite) =>
-    run(`inv-${i.id}`, async () => {
-      await api(`${base}/invites/${i.id}`, { method: "DELETE" });
-      await invites.mutate();
-    });
+    quickly(invites, (rows) => rows.filter((x) => x.id !== i.id), () => api(`${base}/invites/${i.id}`, { method: "DELETE" }));
 
   const revokeLink = (l: ShareLinkRow) =>
-    run(`lnk-${l.id}`, async () => {
-      await api(`${base}/links/${l.id}`, { method: "DELETE" });
-      await links.mutate();
-    });
+    quickly(links, (rows) => rows.filter((x) => x.id !== l.id), () => api(`${base}/links/${l.id}`, { method: "DELETE" }));
 
-  const vis = page.visibility as Visibility;
+  const vis = (chosen ?? page.visibility) as Visibility;
   const inactiveLinks = vis !== "link" && (links.data?.length ?? 0) > 0;
   const inactiveMembers = vis === "private" && (members.data?.length ?? 0) > 0;
 
@@ -203,10 +217,9 @@ export function ShareSheet({
                   key={id}
                   role="radio"
                   aria-checked={on}
-                  disabled={busy === "visibility"}
                   onClick={() => !on && setVisibility(id)}
                   className={cn(
-                    "flex flex-col items-start gap-1.5 rounded-lg border p-3 text-left transition-[border-color,box-shadow] duration-[120ms] hover:border-subtle disabled:opacity-60",
+                    "flex flex-col items-start gap-1.5 rounded-lg border p-3 text-left transition-[border-color,box-shadow] duration-[120ms] hover:border-subtle ",
                     on ? "border-primary bg-primary-soft ring-[3px] ring-primary/15" : "border-border bg-card",
                   )}
                 >
