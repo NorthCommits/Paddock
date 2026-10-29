@@ -342,8 +342,10 @@ async def reply_to_comment(
 async def list_requests(status: str | None = "open", ctx: Context | None = None) -> dict:
     """List revision requests: changes people asked you for by writing @agent in a comment.
 
-    Work through them oldest first: claim_request, publish the fix with publish_page, then
-    complete_request with the new version number.
+    You only see requests whose owner or colleague has said yes to YOUR person's agent working on
+    them. Anything still waiting for a yes is not listed, and claiming it is refused. Work through
+    them oldest first: claim_request, publish the fix with publish_page, then complete_request
+    with the new version number.
 
     Args:
         status: "open" (default, waiting for an agent), "claimed", "done", "dismissed", or

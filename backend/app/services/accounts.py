@@ -120,6 +120,7 @@ async def update_profile(
     ip: str | None,
     theme: str | None = None,
     notify_requests: bool | None = None,
+    agent_approval: str | None = None,
 ) -> User:
     if display_name is not None:
         user.display_name = display_name
@@ -127,6 +128,8 @@ async def update_profile(
         user.theme = theme
     if notify_requests is not None:
         user.notify_requests = notify_requests
+    if agent_approval is not None:
+        user.agent_approval = agent_approval
     audit.record(db, action="user.update_profile", user_id=user.id, ip=ip)
     await db.commit()
     return user

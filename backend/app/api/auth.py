@@ -65,4 +65,5 @@ async def update_me(body: ProfileUpdate, request: Request, db: DbDep, actor: Per
         client_ip(request),
         theme=body.theme,
         notify_requests=body.notify_requests,
+        agent_approval=body.agent_approval,
     )

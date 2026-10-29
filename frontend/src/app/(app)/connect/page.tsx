@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { AgentTour, markTourSeen, tourSeen } from "@/components/agent-tour";
+import { Automate } from "@/components/connect/automate";
 import { ToolTabs } from "@/components/connect/tool-tabs";
 import { CopyField } from "@/components/copy-field";
 import { Button, LinkButton } from "@/components/ui/button";
@@ -174,6 +175,11 @@ function ConnectPage() {
         <div className="mt-6">
           <ToolTabs mcpUrl={MCP_URL} connectedNames={connectedNames} />
         </div>
+
+        <section className="mt-10">
+          <h2 className="mb-3 text-[15px] font-semibold text-foreground">Let your agent act without you</h2>
+          <Automate />
+        </section>
 
         <details className="group mt-10 rounded-xl border border-border bg-card p-5 shadow-card">
           <summary className="cursor-pointer text-[15px] font-semibold text-foreground">

@@ -7,6 +7,8 @@ export type User = {
   email_verified_at: string | null;
   theme: "system" | "light" | "dark";
   notify_requests: boolean;
+  /** ask: wait for my yes. auto: my agent may take any request. never: leave my agent out. */
+  agent_approval: "ask" | "auto" | "never";
 };
 
 export type Me = { user: User; scopes: string[] };
@@ -255,7 +257,7 @@ export function oauthApprove(body: OAuthRequest, decision: "allow" | "deny"): Pr
   return api<{ redirect_to: string }>("/v1/oauth/approve", { method: "POST", body: { ...body, decision } });
 }
 
-export type RequestStatus = "open" | "claimed" | "done" | "dismissed";
+export type RequestStatus = "awaiting" | "open" | "claimed" | "done" | "dismissed";
 
 export type CommentAuthor = {
   user_id: string | null;
@@ -273,6 +275,12 @@ export type RequestInfo = {
   result_version: number | null;
   claim_expires_at: string | null;
   dismiss_reason: string | null;
+  /** Who said yes to their agent working on this, once someone has. */
+  approved_by?: string | null;
+  /** How many people were asked for a yes. */
+  asked?: number;
+  /** This viewer's part: offered, declined, won or lost. Null when they were not asked. */
+  my_offer?: "offered" | "declined" | "won" | "lost" | null;
 };
 
 export type CommentItem = {
@@ -332,6 +340,8 @@ export const EVENT_GROUPS: { title: string; types: { id: string; label: string }
     title: "Requests to the agent",
     types: [
       { id: "request.created", label: "Someone mentions @agent" },
+      { id: "request.awaiting", label: "A request waits for someone to say yes" },
+      { id: "request.approved", label: "Someone says yes to their agent" },
       { id: "request.claimed", label: "An agent claims a request" },
       { id: "request.reopened", label: "A claim runs out" },
       { id: "request.completed", label: "A request is completed" },
@@ -346,3 +356,31 @@ export const EVENT_GROUPS: { title: string; types: { id: string; label: string }
     ],
   },
 ];
+
+export type AppNotification = {
+  id: string;
+  kind: "agent_offer" | "agent_approved" | "agent_done";
+  created_at: string;
+  read: boolean;
+  body: string;
+  actor: string | null;
+  page: { id: string; title: string } | null;
+  request: {
+    id: string;
+    status: RequestStatus;
+    my_offer: "offered" | "declined" | "won" | "lost" | null;
+    approved_by: string | null;
+    approved_by_me: boolean;
+  } | null;
+};
+export type AgentPresence = { connected: boolean; active: boolean; last_seen_at: string | null };
+export type NotificationList = { items: AppNotification[]; unread: number; agent: AgentPresence };
+export type TriggerStatus = { saved: boolean; last_fired_at: string | null; last_result: string | null };
+
+/** Say yes to your own agent working on a request. Throws a 409 `taken` if a colleague got there first. */
+export function approveRequest(id: string): Promise<RequestInfo> {
+  return api<RequestInfo>(`/v1/requests/${id}/approve`, { method: "POST" });
+}
+export function declineRequest(id: string): Promise<RequestInfo> {
+  return api<RequestInfo>(`/v1/requests/${id}/decline`, { method: "POST" });
+}

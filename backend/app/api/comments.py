@@ -150,3 +150,21 @@ async def dismiss_request(
 ):
     reason = body.reason if body else None
     return await requests.dismiss(db, actor, request_id, reason=reason, ip=client_ip(request))
+
+
+@router.post(
+    "/v1/requests/{request_id}/approve",
+    response_model=RequestItemOut,
+    dependencies=[Depends(limit("request"))],
+)
+async def approve_request(request_id: uuid.UUID, request: Request, db: DbDep, actor: ActorDep):
+    return await requests.approve(db, actor, request_id, ip=client_ip(request))
+
+
+@router.post(
+    "/v1/requests/{request_id}/decline",
+    response_model=RequestItemOut,
+    dependencies=[Depends(limit("request"))],
+)
+async def decline_request(request_id: uuid.UUID, request: Request, db: DbDep, actor: ActorDep):
+    return await requests.decline(db, actor, request_id, ip=client_ip(request))

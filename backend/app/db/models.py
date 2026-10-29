@@ -47,6 +47,9 @@ class User(Base):
     theme: Mapped[str] = mapped_column(String(10), default="system", server_default="system")
     # Email this person when someone asks their agent for a change on one of their pages.
     notify_requests: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # What happens when a colleague asks for an agent on a page this person can act on:
+    # "ask" sends a notification and waits for a yes, "auto" says yes in advance, "never" opts out.
+    agent_approval: Mapped[str] = mapped_column(String(5), default="ask", server_default="ask")
 
 
 class ApiToken(Base):
@@ -314,7 +317,13 @@ class RevisionRequest(Base):
     base_version_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("page_versions.id", ondelete="SET NULL")
     )
+    # awaiting (a person must say yes), open (approved, ready for that person's agent), claimed,
+    # done or dismissed.
     status: Mapped[str] = mapped_column(String(10), default="open", server_default="open")
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     claimed_by_token_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     result_version_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -328,6 +337,62 @@ class RevisionRequest(Base):
         UniqueConstraint("comment_id", name="uq_revision_requests_comment_id"),
         Index("ix_revision_requests_page_id_status", "page_id", "status"),
     )
+
+
+class RequestOffer(Base):
+    """A request put to one person: may their agent take it? Only one person ends up saying yes."""
+
+    __tablename__ = "request_offers"
+
+    request_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("revision_requests.id", ondelete="CASCADE")
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    status: Mapped[str] = mapped_column(
+        String(10), default="offered", server_default="offered"
+    )  # offered, declined, won or lost
+    created_at: Mapped[datetime] = _now_column()
+    updated_at: Mapped[datetime] = _now_column(onupdate=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint("request_id", "user_id"),
+        Index("ix_request_offers_user_id", "user_id"),
+    )
+
+
+class Notification(Base):
+    """Something a person should see in the app: a request waiting for their yes, or news of one."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(20))  # agent_offer, agent_approved, agent_done
+    page_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    request_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("revision_requests.id", ondelete="CASCADE")
+    )
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    body: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = _now_column()
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index("ix_notifications_user_id_created_at", "user_id", "created_at"),)
+
+
+class AgentTrigger(Base):
+    """Where to knock when a person approves a request: their own scheduled Claude Code task."""
+
+    __tablename__ = "agent_triggers"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    url: Mapped[str] = mapped_column(Text)
+    token_enc: Mapped[str] = mapped_column(Text)  # encrypted
+    created_at: Mapped[datetime] = _now_column()
+    last_fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_result: Mapped[str | None] = mapped_column(String(80))
 
 
 class Event(Base):

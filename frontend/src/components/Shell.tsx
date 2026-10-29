@@ -14,6 +14,7 @@ import { useModKey } from "@/lib/shortcut";
 import { forgetTheme, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Wordmark } from "./brand";
+import { NotificationBell } from "./notification-bell";
 import { Palette } from "./Palette";
 import { LinkButton } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
@@ -184,6 +185,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <Menu size={18} />
           </button>
           <span className="flex-1" />
+          {me && <NotificationBell />}
           <button
             className="flex h-7 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-[12px] text-muted-foreground transition-colors duration-[120ms] hover:text-foreground"
             onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))}

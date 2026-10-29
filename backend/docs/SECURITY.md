@@ -114,6 +114,16 @@ Public link pages are not indexed by search engines.
 - A user may have 10 webhooks. Failed deliveries are retried on a fixed schedule and then
   given up.
 
+### 10. Agents act only with a person's yes
+
+- A colleague's request is never handed to an agent by itself. The people who could approve are
+  notified in the app and by email, and the request waits until one of them says yes.
+- Only the approver's own agent can see or claim an approved request. Other agents get a refusal.
+- Two yes answers at the same moment are settled by a row lock: one wins, the other is told who did.
+- A yes that no agent acts on within 30 minutes is withdrawn and asked for again.
+- A saved Claude Code task token is encrypted at rest, never returned by the API, and only the
+  official `api.anthropic.com` task address is accepted. The text sent to it is treated as data.
+
 ## Other findings
 
 - **Errors.** Error bodies use a fixed shape with a request id. Stack traces are not returned.

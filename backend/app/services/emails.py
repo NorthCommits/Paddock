@@ -44,16 +44,16 @@ def agent_request(
     to: str, who: str, title: str, excerpt: str, quote: str | None, link: str
 ) -> Message:
     about = f" about \u201c{quote}\u201d" if quote else ""
-    intro = f"{who} asked your agent to change {title}{about}: \u201c{excerpt}\u201d"
+    intro = f"{who} asked for an agent to change {title}{about}: \u201c{excerpt}\u201d"
     outro = (
-        f"Nothing happens until your agent looks. Open Claude, ChatGPT, Codex or whichever agent "
-        f"you connected and say: Check Paddock for open requests on {title} and handle them. "
-        "You can turn these emails off in Settings, Profile."
+        "Your agent will not touch it unless you say yes. Open the page and choose Let my agent do "
+        "it. If a colleague says yes first, you will see that instead. You can turn these emails "
+        "off in Settings, Profile."
     )
     text = f"{intro}\n\nOpen the page: {link}\n\n{outro}\n"
     return Message(
         to=to,
-        subject=f"{who} is waiting on your agent: {title}",
+        subject=f"{who} needs a yes for an agent: {title}",
         text=text,
-        html=_page("A request is waiting for your agent", intro, "Open the page", link, outro),
+        html=_page("A request needs your yes", intro, "Open the page", link, outro),
     )

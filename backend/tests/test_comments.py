@@ -319,7 +319,7 @@ async def waiting_mails(email):
     from app.services import mailer
 
     await mailer.finish_sending()
-    return [m for m in mails_to(email) if "waiting on your agent" in m.subject]
+    return [m for m in mails_to(email) if "needs a yes for an agent" in m.subject]
 
 
 async def test_a_comment_from_an_agent_is_named_after_its_owner_and_app(client):
@@ -336,8 +336,9 @@ async def test_a_comment_from_an_agent_is_named_after_its_owner_and_app(client):
     assert person.json()["author"]["agent_label"] is None
 
 
-async def test_owner_is_emailed_once_while_a_colleague_waits_on_their_agent(client):
+async def test_owner_is_emailed_once_while_a_colleague_waits_for_their_yes(client):
     data, page_id = await setup(client)
+    await make_token(client, data, scopes=("requests:act", "pages:read"))
     bo = other()
     bo_data, _ = await share(client, data, page_id, bo, "commenter")
     anchor = {"v": 1, "quote": "Launch in spring.", "tag": "p", "selector": "p"}
@@ -347,7 +348,7 @@ async def test_owner_is_emailed_once_while_a_colleague_waits_on_their_agent(clie
     assert len(mails) == 1
     assert "Launch in spring." in mails[0].text
     assert f"/pages/{page_id}" in mails[0].text
-    assert "Check Paddock for open requests" in mails[0].text
+    assert "Let my agent do it" in mails[0].text
     await comment(bo, bo_data, page_id, "@agent and also the footer")
     assert len(await waiting_mails("ana@example.com")) == 1  # already told
     await bo.aclose()
@@ -355,6 +356,7 @@ async def test_owner_is_emailed_once_while_a_colleague_waits_on_their_agent(clie
 
 async def test_no_email_for_the_owners_own_mention_or_when_switched_off(client):
     data, page_id = await setup(client)
+    await make_token(client, data, scopes=("requests:act", "pages:read"))
     await comment(client, data, page_id, "@agent tighten this")
     assert await waiting_mails("ana@example.com") == []
 
