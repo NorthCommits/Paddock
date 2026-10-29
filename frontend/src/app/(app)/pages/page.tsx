@@ -1,11 +1,12 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, FileText, Plus, Trash2, User } from "lucide-react";
+import { Bot, FileText, Plus, Sparkles, Trash2, User, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import useSWR from "swr";
+import { markTourSeen, tourSeen } from "@/components/agent-tour";
 import { GateMark } from "@/components/brand";
 import { UploadSheet } from "@/components/upload-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,7 @@ import { Sheet } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WakeHint } from "@/components/wake-hint";
 import { ROLE_LABEL, api } from "@/lib/api";
-import type { Page, PageList } from "@/lib/api";
+import type { Page, PageList, TokenRow } from "@/lib/api";
 import { ago } from "@/lib/format";
 import { useLive } from "@/lib/live";
 
@@ -23,6 +24,35 @@ const ghosts = [
   { t: "Onboarding flow mockup", m: "v1 · 1 request" },
   { t: "Launch checklist", m: "v5 · up to date" },
 ];
+
+// Shown once after an agent is connected, pointing at the short tour on the Connect page.
+function TourBanner() {
+  const tokens = useSWR("tokens", () => api<TokenRow[]>("/v1/tokens"), { revalidateOnFocus: false });
+  const [unseen, setUnseen] = useState(false);
+  useEffect(() => setUnseen(!tourSeen()), []);
+  const connected = (tokens.data ?? []).some((t) => t.source === "oauth" && !t.revoked_at);
+  if (!unseen || !connected) return null;
+  return (
+    <div className="mt-4 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary-soft px-4 py-3">
+      <Sparkles size={18} aria-hidden="true" className="shrink-0 text-primary" />
+      <p className="min-w-0 flex-1 text-[14px] leading-[20px] text-foreground">
+        Your agent is connected. See how pages, comments and versions work in a minute.
+      </p>
+      <LinkButton href="/connect?tour=1" size="sm">Show me</LinkButton>
+      <button
+        type="button"
+        aria-label="Dismiss"
+        onClick={() => {
+          markTourSeen();
+          setUnseen(false);
+        }}
+        className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-card"
+      >
+        <X size={16} />
+      </button>
+    </div>
+  );
+}
 
 function Empty({ onNew }: { onNew: () => void }) {
   return (
@@ -101,6 +131,8 @@ function Pages() {
           </Button>
         )}
       </div>
+
+      <TourBanner />
 
       {error ? (
         <p role="alert" className="mt-6 text-[13px] text-destructive">{(error as Error).message}</p>

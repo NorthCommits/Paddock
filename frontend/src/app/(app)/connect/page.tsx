@@ -1,11 +1,13 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import useSWR from "swr";
+import { AgentTour, markTourSeen, tourSeen } from "@/components/agent-tour";
 import { ToolTabs } from "@/components/connect/tool-tabs";
 import { CopyField } from "@/components/copy-field";
-import { LinkButton } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import type { TokenRow } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -131,31 +133,65 @@ function Advanced() {
 const live = (t: TokenRow) =>
   !t.revoked_at && !(t.expires_at && new Date(t.expires_at) < new Date());
 
-export default function Page() {
+function ConnectPage() {
   // The address may point at a sleeping free server. Wake it now so the app finds it ready.
   useEffect(() => warmServers(), []);
   // The same key as the Tokens settings page, so a revoke there shows here at once.
   const { data } = useSWR("tokens", () => api<TokenRow[]>("/v1/tokens"), { refreshInterval: 3000 });
   const connectedNames = (data ?? []).filter((t) => t.source === "oauth" && live(t)).map((t) => t.name);
+  const connected = connectedNames.length;
+  const wanted = useSearchParams().get("tour") === "1";
+
+  // The tour opens the moment an app connects, the first time someone arrives already connected,
+  // and whenever they ask for it.
+  const [tour, setTour] = useState(false);
+  const before = useRef<number | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const first = before.current === null;
+    if (connected > 0 && ((!first && before.current === 0) || (first && (!tourSeen() || wanted)))) setTour(true);
+    before.current = connected;
+  }, [data, connected, wanted]);
+
+  function done() {
+    markTourSeen();
+    setTour(false);
+  }
 
   return (
-    <div className="max-w-[640px]">
-      <h1 className="text-[22px] font-semibold leading-7 tracking-[-0.01em] text-foreground">Connect an agent</h1>
-      <p className="mt-2 text-[15px] leading-[22px] text-muted-foreground">
-        Pick your tool, paste one address, and click Allow. There is no token to copy, and you keep the model and its keys.
-      </p>
-      <div className="mt-6">
-        <ToolTabs mcpUrl={MCP_URL} connectedNames={connectedNames} />
-      </div>
-
-      <details className="group mt-10 rounded-xl border border-border bg-card p-5 shadow-card">
-        <summary className="cursor-pointer text-[15px] font-semibold text-foreground">
-          Advanced: tokens and the command line
-        </summary>
-        <div className="mt-5">
-          <Advanced />
+    <div className="max-w-[920px]">
+      {tour && connected > 0 && <AgentTour apps={connectedNames} onDone={done} />}
+      <div className="max-w-[640px]">
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-[22px] font-semibold leading-7 tracking-[-0.01em] text-foreground">Connect an agent</h1>
+          {connected > 0 && !tour && (
+            <Button variant="secondary" size="sm" onClick={() => setTour(true)}>How it works</Button>
+          )}
         </div>
-      </details>
+        <p className="mt-2 text-[15px] leading-[22px] text-muted-foreground">
+          Pick your tool, paste one address, and click Allow. There is no token to copy, and you keep the model and its keys.
+        </p>
+        <div className="mt-6">
+          <ToolTabs mcpUrl={MCP_URL} connectedNames={connectedNames} />
+        </div>
+
+        <details className="group mt-10 rounded-xl border border-border bg-card p-5 shadow-card">
+          <summary className="cursor-pointer text-[15px] font-semibold text-foreground">
+            Advanced: tokens and the command line
+          </summary>
+          <div className="mt-5">
+            <Advanced />
+          </div>
+        </details>
+      </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense>
+      <ConnectPage />
+    </Suspense>
   );
 }

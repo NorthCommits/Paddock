@@ -4,13 +4,22 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.errors import AppError
-from app.db.models import Comment, Page, PageVersion, RevisionRequest, User
+from app.db.models import (
+    ApiToken,
+    Comment,
+    OAuthClient,
+    Page,
+    PageVersion,
+    RevisionRequest,
+    User,
+)
 from app.schemas.comments import AuthorOut, CommentListOut, CommentOut, RequestOut
-from app.services import audit, events
+from app.services import audit, emails, events, mailer
 from app.services.pages import get_for_actor, role_for
 
 # "@agent" as a whole word, in any case. "@agentic" and "name@agent.com" do not count.
@@ -52,14 +61,45 @@ def request_out(r: RevisionRequest, numbers: dict[uuid.UUID, int]) -> RequestOut
     )
 
 
-def author_out(comment: Comment, users: dict[uuid.UUID, User]) -> AuthorOut:
+def author_out(
+    comment: Comment, users: dict[uuid.UUID, User], labels: dict[uuid.UUID, str] | None = None
+) -> AuthorOut:
     user = users.get(comment.author_user_id) if comment.author_user_id else None
     return AuthorOut(
         user_id=user.id if user else None,
         handle=user.handle if user else None,
         display_name=user.display_name if user else None,
         by_agent=comment.author_token_id is not None,
+        agent_label=(labels or {}).get(comment.id),
     )
+
+
+SIGN_IN_SUFFIX = " (connected with sign-in)"
+
+
+async def agent_labels(
+    db: AsyncSession, comments: list[Comment], users: dict[uuid.UUID, User]
+) -> dict[uuid.UUID, str]:
+    """A name for each comment an agent wrote, such as "Swapnil's Claude" (owner, then app)."""
+    token_ids = {c.author_token_id for c in comments if c.author_token_id}
+    if not token_ids:
+        return {}
+    tokens = {t.id: t for t in await db.scalars(select(ApiToken).where(ApiToken.id.in_(token_ids)))}
+    client_ids = {t.client_id for t in tokens.values() if t.client_id}
+    clients: dict[str, str] = {}
+    if client_ids:
+        rows = await db.scalars(select(OAuthClient).where(OAuthClient.client_id.in_(client_ids)))
+        clients = {c.client_id: c.client_name for c in rows}
+    out: dict[uuid.UUID, str] = {}
+    for c in comments:
+        token = tokens.get(c.author_token_id) if c.author_token_id else None
+        if token is None:
+            continue
+        app = clients.get(token.client_id or "") or token.name.removesuffix(SIGN_IN_SUFFIX)
+        owner = users.get(c.author_user_id) if c.author_user_id else None
+        first = ((owner.display_name or "").split() or [owner.handle])[0] if owner else ""
+        out[c.id] = f"{first}'s {app}" if first else app
+    return out
 
 
 async def users_by_id(db: AsyncSession, ids: set[uuid.UUID]) -> dict[uuid.UUID, User]:
@@ -88,6 +128,7 @@ async def comment_outs(db: AsyncSession, comments: list[Comment]) -> dict[uuid.U
     for r in requests.values():
         version_ids |= {v for v in (r.base_version_id, r.result_version_id) if v}
     numbers = await version_numbers(db, version_ids)
+    labels = await agent_labels(db, comments, users)
 
     out: dict[uuid.UUID, CommentOut] = {}
     for c in comments:
@@ -100,7 +141,7 @@ async def comment_outs(db: AsyncSession, comments: list[Comment]) -> dict[uuid.U
             version_number=numbers.get(c.version_id) if c.version_id else None,
             author=AuthorOut(user_id=None, handle=None, display_name=None, by_agent=False)
             if gone
-            else author_out(c, users),
+            else author_out(c, users, labels),
             body="" if gone else c.body,
             anchor=None if gone else c.anchor,
             mentions_agent=False if gone else c.mentions_agent,
@@ -193,6 +234,43 @@ async def comment_created(
         await request_event(db, page, request, "request.created", comment)
 
 
+async def notify_owner(
+    db: AsyncSession, page: Page, comment: Comment, request: RevisionRequest, author: User
+) -> None:
+    """Email the page's owner that someone is waiting on their agent.
+
+    One email per wait: if other requests are already open on the page, the owner has been told.
+    """
+    if author.id == page.owner_id:
+        return
+    owner = await db.get(User, page.owner_id)
+    if owner is None or not owner.notify_requests:
+        return
+    others = await db.scalar(
+        select(func.count())
+        .select_from(RevisionRequest)
+        .where(
+            RevisionRequest.page_id == page.id,
+            RevisionRequest.id != request.id,
+            RevisionRequest.status.in_(("open", "claimed")),
+        )
+    )
+    if others:
+        return
+    quote = (comment.anchor or {}).get("selected") or (comment.anchor or {}).get("quote")
+    link = f"{get_settings().app_origin.rstrip('/')}/pages/{page.id}"
+    mailer.send_later(
+        emails.agent_request(
+            owner.email,
+            author.display_name or f"@{author.handle}",
+            page.title,
+            comment.body[:300],
+            str(quote)[:120] if quote else None,
+            link,
+        )
+    )
+
+
 async def create(
     db: AsyncSession,
     actor,
@@ -250,6 +328,8 @@ async def create(
     )
     await db.commit()
     await db.refresh(comment)
+    if request is not None:
+        await notify_owner(db, page, comment, request, actor.user)
     return (await comment_outs(db, [comment]))[comment.id]
 
 

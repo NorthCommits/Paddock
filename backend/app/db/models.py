@@ -45,6 +45,8 @@ class User(Base):
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # The colour theme the person chose: "system" follows the device, or "light" or "dark".
     theme: Mapped[str] = mapped_column(String(10), default="system", server_default="system")
+    # Email this person when someone asks their agent for a change on one of their pages.
+    notify_requests: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 
 class ApiToken(Base):

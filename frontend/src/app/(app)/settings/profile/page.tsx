@@ -41,6 +41,20 @@ export default function Page() {
     }
   }
 
+  const [notifyError, setNotifyError] = useState("");
+  async function setNotify(on: boolean) {
+    if (!me) return;
+    setNotifyError("");
+    // Shown at once, then saved. A failure puts the switch back.
+    await mutate({ ...me, user: { ...me.user, notify_requests: on } }, { revalidate: false });
+    try {
+      await api<User>("/v1/me", { method: "PATCH", body: { notify_requests: on } });
+    } catch (err) {
+      setNotifyError(err instanceof ApiError ? err.message : "Could not save. Try again.");
+      await mutate();
+    }
+  }
+
   async function signOut() {
     await signOutNow();
     router.push("/login");
@@ -99,6 +113,25 @@ export default function Page() {
             )}
           </div>
         </form>
+      </Section>
+
+      <Section title="Email" hint="Agents only act when they are asked, so we tell you when someone is waiting on yours.">
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-4 shadow-card">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={me.user.notify_requests}
+            onChange={(e) => void setNotify(e.target.checked)}
+            className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]"
+          />
+          <span>
+            <span className="block text-[14px] font-medium text-foreground">Email me when someone asks my agent for a change</span>
+            <span className="mt-0.5 block text-[13px] text-muted-foreground">
+              One email while requests are waiting on a page, with a line to say to your agent. Your own @agent comments never email you.
+            </span>
+          </span>
+        </label>
+        {notifyError && <p role="alert" className="mt-2 text-[13px] text-destructive">{notifyError}</p>}
       </Section>
 
       <Section title="Session">

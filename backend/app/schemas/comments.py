@@ -60,6 +60,8 @@ class AuthorOut(BaseModel):
     handle: str | None
     display_name: str | None
     by_agent: bool
+    # For an agent: who it belongs to and which app it is, such as "Swapnil's Claude".
+    agent_label: str | None = None
 
 
 class RequestOut(BaseModel):

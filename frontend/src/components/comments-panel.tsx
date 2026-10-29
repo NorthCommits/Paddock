@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, Crosshair, RotateCcw, X } from "lucide-react";
+import { Ban, Bot, Check, Crosshair, RotateCcw, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
@@ -13,24 +13,32 @@ import { ago } from "@/lib/format";
 import { useCalm } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
-type Filter = "open" | "resolved" | "all";
+type Filter = "open" | "resolved" | "rejected" | "all";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "open", label: "Open" },
   { id: "resolved", label: "Resolved" },
+  { id: "rejected", label: "Rejected" },
   { id: "all", label: "All" },
 ];
 
-export function useThreads(pageId: string, filter: Filter) {
-  return useSWR(["comments", pageId, filter], () =>
-    api<ThreadList>(`/v1/pages/${pageId}/comments${filter === "all" ? "" : `?status=${filter}`}`),
-  );
+// Every thread is fetched once. The tabs are views of that one list, so switching is instant and a
+// change (resolve, reject, send) lands in the right tab straight away.
+export function useThreads(pageId: string) {
+  return useSWR(["comments", pageId], () => api<ThreadList>(`/v1/pages/${pageId}/comments`));
+}
+
+/** Which tab a thread belongs to: resolved wins, then a rejected request, otherwise open. */
+export function bucket(t: Thread): "open" | "resolved" | "rejected" {
+  if (t.resolved_at) return "resolved";
+  if (t.request?.status === "dismissed") return "rejected";
+  return "open";
 }
 
 /** Number each open thread that points at a spot on the page, in order. The page shows the same numbers. */
-export function markNumbers(open: Thread[] | undefined): Map<string, number> {
+export function markNumbers(threads: Thread[] | undefined): Map<string, number> {
   const out = new Map<string, number>();
-  (open ?? []).filter((t) => t.anchor && !t.deleted).forEach((t, i) => out.set(t.id, i + 1));
+  (threads ?? []).filter((t) => t.anchor && !t.deleted && bucket(t) === "open").forEach((t, i) => out.set(t.id, i + 1));
   return out;
 }
 
@@ -42,7 +50,7 @@ function statusChip(c: CommentItem) {
   if (r.status === "open") return <Badge>Waiting for agent</Badge>;
   if (r.status === "claimed") return <Badge variant="success">Agent working</Badge>;
   if (r.status === "done") return <Badge variant="success">Done in v{r.result_version}</Badge>;
-  return <Badge>Dismissed</Badge>;
+  return <Badge>Rejected</Badge>;
 }
 
 // Shows a comment, with @agent standing out as a chip.
@@ -114,53 +122,91 @@ export function CommentsPanel({
 }) {
   const [filter, setFilter] = useState<Filter>("open");
   const [error, setError] = useState("");
-  const threads = useThreads(pageId, filter);
-  const open = useThreads(pageId, "open");
-  const numbers = markNumbers(open.data?.items);
+  const threads = useThreads(pageId);
+  const all = threads.data?.items;
+  const numbers = markNumbers(all);
   const self = useSWR<Me>("me", null);
   const calm = useCalm();
+  const listRef = useRef<HTMLDivElement>(null);
 
   const { mutate } = useSWRConfig();
   const canComment = role !== "viewer";
   const canModerate = role === "owner" || role === "editor";
 
-  const refreshAll = () => mutate((key) => Array.isArray(key) && key[0] === "comments" && key[1] === pageId);
+  const shown = (all ?? []).filter((t) => filter === "all" || bucket(t) === filter);
+  const counts = { open: 0, resolved: 0, rejected: 0 };
+  (all ?? []).forEach((t) => (counts[bucket(t)] += 1));
+
+  const refresh = () => mutate(["comments", pageId]);
+  // Change the list on screen first. The server is told afterwards and the real list is fetched.
+  const change = (fn: (items: Thread[]) => Thread[]) =>
+    mutate(["comments", pageId], (cur?: ThreadList) => (cur ? { items: fn(cur.items) } : cur), { revalidate: false });
+  const edit = (id: string, fn: (t: Thread) => Thread) => change((items) => items.map((t) => (t.id === id ? fn(t) : t)));
 
   async function run(work: () => Promise<unknown>) {
     try {
       setError("");
       await work();
-      // Every filter shows the same threads, so refresh them all.
-      await refreshAll();
     } catch (err) {
       setError((err as Error).message);
     }
+    await refresh();
   }
 
-  // Resolve and reopen show at once. The list is changed first, then the server is told, and the
-  // truth is fetched afterwards (which also puts things back if the request failed).
   async function setResolved(t: Thread, resolved: boolean) {
     const by = self.data?.user.handle ?? "";
-    (["open", "resolved", "all"] as Filter[]).forEach((f) => {
-      void mutate(
-        ["comments", pageId, f],
-        (cur?: ThreadList) => {
-          if (!cur) return cur;
-          const next = { ...t, resolved_at: resolved ? new Date().toISOString() : null, resolved_by: resolved ? by : null };
-          if (f === "all") return { items: cur.items.map((x) => (x.id === t.id ? next : x)) };
-          if ((f === "resolved") !== resolved) return { items: cur.items.filter((x) => x.id !== t.id) };
-          return cur.items.some((x) => x.id === t.id) ? cur : { items: [next, ...cur.items] };
-        },
-        { revalidate: false },
-      );
-    });
+    await edit(t.id, (x) => ({ ...x, resolved_at: resolved ? new Date().toISOString() : null, resolved_by: resolved ? by : null }));
+    await run(() => api(`/v1/comments/${t.id}/resolve`, { method: "POST", body: { resolved } }));
+  }
+
+  async function reject(t: Thread, reason: string) {
+    if (!t.request) return;
+    const id = t.request.id;
+    await edit(t.id, (x) => ({ ...x, request: x.request && { ...x.request, status: "dismissed", dismiss_reason: reason || null } }));
+    await run(() => api(`/v1/requests/${id}/dismiss`, { method: "POST", body: reason ? { reason } : {} }));
+  }
+
+  // A new comment or reply shows at once, marked as sent when the server answers. If it fails the
+  // text stays in the box so nothing is lost.
+  async function post(body: string, extra: { parent?: string; anchor?: Anchor | null } = {}) {
+    const me = self.data?.user;
+    const asks = /(^|[^A-Za-z0-9_@])@agent(?![A-Za-z0-9_-])/i.test(body);
+    const item: Thread = {
+      id: `sending-${Date.now()}`,
+      page_id: pageId,
+      parent_id: extra.parent ?? null,
+      version_number: version,
+      author: { user_id: me?.id ?? null, handle: me?.handle ?? null, display_name: me?.display_name ?? null, by_agent: false },
+      body,
+      mentions_agent: asks,
+      created_at: new Date().toISOString(),
+      edited_at: null,
+      deleted: false,
+      resolved_at: null,
+      resolved_by: null,
+      anchor: extra.anchor ?? null,
+      request: asks && !extra.parent ? { id: "sending", status: "open", base_version: null, result_version: null, claim_expires_at: null, dismiss_reason: null } : null,
+      replies: [],
+    };
+    await change((items) =>
+      extra.parent ? items.map((t) => (t.id === extra.parent ? { ...t, replies: [...t.replies, item] } : t)) : [...items, item],
+    );
+    if (!extra.parent) {
+      if (filter === "resolved" || filter === "rejected") setFilter("open");
+      requestAnimationFrame(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: calm ? "auto" : "smooth" }));
+    }
     try {
       setError("");
-      await api(`/v1/comments/${t.id}/resolve`, { method: "POST", body: { resolved } });
+      await api(`/v1/pages/${pageId}/comments`, {
+        method: "POST",
+        body: { body, version, ...(extra.parent ? { parent_id: extra.parent } : {}), ...(extra.anchor ? { anchor: extra.anchor } : {}) },
+      });
     } catch (err) {
       setError((err as Error).message);
+      await refresh();
+      throw err;
     }
-    await refreshAll();
+    await refresh();
   }
 
   return (
@@ -185,24 +231,29 @@ export function CommentsPanel({
             )}
           >
             {f.label}
+            {f.id !== "all" && all && counts[f.id] > 0 && <span className="tnum ml-1 opacity-80">{counts[f.id]}</span>}
           </button>
         ))}
       </div>
 
       {error && <p role="alert" className="px-4 pt-3 text-[13px] text-destructive">{error}</p>}
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-3">
+      <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto p-3">
         {threads.error ? (
           <p role="alert" className="text-[14px] text-destructive">{(threads.error as Error).message}</p>
         ) : !threads.data ? (
           [0, 1].map((n) => <Skeleton key={n} className="h-24" />)
-        ) : threads.data.items.length === 0 ? (
+        ) : shown.length === 0 ? (
           <p className="px-1 py-6 text-center text-[14px] text-muted-foreground">
-            {filter === "resolved" ? "No resolved threads." : "No comments yet. Hover any part of the page and press + to comment on it."}
+            {filter === "resolved"
+              ? "No resolved threads."
+              : filter === "rejected"
+                ? "Nothing rejected. Requests you turn down, with your reason, are kept here."
+                : "No comments yet. Hover any part of the page and press + to comment on it."}
           </p>
         ) : (
           <AnimatePresence initial={false}>
-            {threads.data.items.map((t) => (
+            {shown.map((t) => (
               <motion.div
                 key={t.id}
                 layout={calm ? false : "position"}
@@ -213,15 +264,15 @@ export function CommentsPanel({
               >
                 <ThreadCard
                   thread={t}
-                  pageId={pageId}
                   me={me}
                   canComment={canComment}
                   canModerate={canModerate}
-                  version={version}
                   number={numbers.get(t.id)}
                   active={activeId === t.id}
                   run={run}
+                  post={post}
                   onResolve={(resolved) => void setResolved(t, resolved)}
+                  onReject={(reason) => void reject(t, reason)}
                   onShow={onShow}
                 />
               </motion.div>
@@ -237,10 +288,14 @@ export function CommentsPanel({
           anchor={draft}
           onClearAnchor={() => onDraft(null)}
           onSend={async (body) => {
-            await run(() =>
-              api(`/v1/pages/${pageId}/comments`, { method: "POST", body: { body, version, ...(draft ? { anchor: draft } : {}) } }),
-            );
+            const attached = draft;
             onDraft(null);
+            try {
+              await post(body, { anchor: attached });
+            } catch (err) {
+              onDraft(attached);
+              throw err;
+            }
           }}
         />
       ) : (
@@ -252,33 +307,36 @@ export function CommentsPanel({
 
 function ThreadCard({
   thread,
-  pageId,
   me,
   canComment,
   canModerate,
-  version,
   number,
   active,
   run,
+  post,
   onResolve,
+  onReject,
   onShow,
 }: {
   thread: Thread;
-  pageId: string;
   me: string | undefined;
   canComment: boolean;
   canModerate: boolean;
-  version: number | null;
   number: number | undefined;
   active: boolean;
   run: (work: () => Promise<unknown>) => Promise<void>;
+  post: (body: string, extra?: { parent?: string }) => Promise<void>;
   onResolve: (resolved: boolean) => void;
+  onReject: (reason: string) => void;
   onShow: (anchor: Anchor) => void;
 }) {
   const [replying, setReplying] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
   const ref = useRef<HTMLElement>(null);
   const resolved = !!thread.resolved_at;
-  const live = thread.request && (thread.request.status === "open" || thread.request.status === "claimed");
+  const rejected = !resolved && thread.request?.status === "dismissed";
+  const live = thread.request && thread.request.id !== "sending" && (thread.request.status === "open" || thread.request.status === "claimed");
   const all = [thread, ...thread.replies];
 
   useEffect(() => {
@@ -291,11 +349,11 @@ function ThreadCard({
       className={cn(
         "rounded-lg border bg-card p-3 transition-colors duration-300",
         active ? "border-primary ring-2 ring-primary/30" : "border-border",
-        resolved && "bg-muted",
+        (resolved || rejected) && "bg-muted",
       )}
     >
       {thread.anchor && !thread.deleted && (
-        <AnchorChip anchor={thread.anchor} n={resolved ? undefined : number} onShow={() => onShow(thread.anchor!)} />
+        <AnchorChip anchor={thread.anchor} n={resolved || rejected ? undefined : number} onShow={() => onShow(thread.anchor!)} />
       )}
       {all.map((c) => (
         <Message key={c.id} c={c} me={me} canModerate={canModerate} run={run} first={c.id === thread.id} />
@@ -311,13 +369,42 @@ function ThreadCard({
             {resolved ? "Reopen" : "Resolve"}
           </Button>
         )}
-        {canModerate && live && (
-          <Button size="sm" variant="ghost" onClick={() => run(() => api(`/v1/requests/${thread.request!.id}/dismiss`, { method: "POST", body: {} }))}>
-            Dismiss request
+        {canModerate && live && !rejecting && (
+          <Button size="sm" variant="ghost" onClick={() => setRejecting(true)}>
+            <Ban aria-hidden="true" /> Reject
           </Button>
         )}
       </div>
       {resolved && thread.resolved_by && <p className="mt-1 text-[13px] text-muted-foreground">Resolved by @{thread.resolved_by}</p>}
+      {rejected && thread.request?.dismiss_reason && (
+        <p className="mt-1 text-[13px] text-muted-foreground">Rejected: {thread.request.dismiss_reason}</p>
+      )}
+
+      {rejecting && (
+        <form
+          className="mt-2 space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onReject(reason.trim());
+            setRejecting(false);
+            setReason("");
+          }}
+        >
+          <input
+            autoFocus
+            aria-label="Reason for rejecting (optional)"
+            placeholder="Why? (optional, your agent and the author will see it)"
+            value={reason}
+            maxLength={500}
+            onChange={(e) => setReason(e.target.value)}
+            className="w-full rounded-md border border-input-border bg-card px-2.5 py-1.5 text-[14px] text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
+          />
+          <div className="flex justify-end gap-1">
+            <Button type="button" size="sm" variant="ghost" onClick={() => setRejecting(false)}>Cancel</Button>
+            <Button type="submit" size="sm">Reject request</Button>
+          </div>
+        </form>
+      )}
 
       {replying && (
         <div className="mt-2">
@@ -326,8 +413,8 @@ function ThreadCard({
             label="Reply"
             hint="Mention @agent to ask for another change"
             onSend={async (body) => {
-              await run(() => api(`/v1/pages/${pageId}/comments`, { method: "POST", body: { body, parent_id: thread.id, version } }));
               setReplying(false);
+              await post(body, { parent: thread.id });
             }}
           />
         </div>
@@ -361,8 +448,11 @@ function Message({
         ) : (
           <>
             {c.author.by_agent && <Bot size={13} aria-hidden="true" />}
-            <span className="font-semibold text-foreground">@{c.author.handle}</span>
-            {c.author.by_agent && <span>(agent)</span>}
+            {c.author.by_agent ? (
+              <span className="font-semibold text-foreground">{c.author.agent_label ?? `@${c.author.handle}'s agent`}</span>
+            ) : (
+              <span className="font-semibold text-foreground">@{c.author.handle}</span>
+            )}
           </>
         )}
         <span className="tnum">{ago(c.created_at)}</span>
@@ -388,10 +478,6 @@ function Message({
         />
       ) : (
         <Body text={c.body} />
-      )}
-
-      {c.request?.status === "dismissed" && c.request.dismiss_reason && (
-        <p className="mt-1 text-[13px] text-muted-foreground">Dismissed: {c.request.dismiss_reason}</p>
       )}
 
       {!c.deleted && !editing && (mine || canDelete) && (
@@ -443,10 +529,14 @@ function Composer({
 
   async function send() {
     if (empty || busy) return;
+    const body = text.trim();
+    // The box empties at once. If sending fails the words come back, so nothing is lost.
+    setText("");
     setBusy(true);
     try {
-      await onSend(text.trim());
-      setText("");
+      await onSend(body);
+    } catch {
+      setText((now) => (now ? now : body));
     } finally {
       setBusy(false);
     }

@@ -59,5 +59,10 @@ async def me(actor: ActorDep):
 @router.patch("/me", response_model=UserOut)
 async def update_me(body: ProfileUpdate, request: Request, db: DbDep, actor: PersonDep):
     return await accounts.update_profile(
-        db, actor.user, body.display_name, client_ip(request), theme=body.theme
+        db,
+        actor.user,
+        body.display_name,
+        client_ip(request),
+        theme=body.theme,
+        notify_requests=body.notify_requests,
     )
