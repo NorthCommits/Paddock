@@ -15,7 +15,7 @@ const options: { id: Theme; label: string; hint: string; icon: typeof Sun }[] = 
 export default function Page() {
   const [theme, setTheme] = useTheme();
   return (
-    <Section title="Theme" hint="Saved in this browser only.">
+    <Section title="Theme" hint="Saved to your account, so it follows you to every device. Signed out pages follow your device.">
       <div role="radiogroup" aria-label="Theme" className="grid gap-3 sm:grid-cols-3">
         {options.map(({ id, label, hint, icon: Icon }) => {
           const on = theme === id;

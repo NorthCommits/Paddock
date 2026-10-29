@@ -2,6 +2,7 @@
 
 import { mutate } from "swr";
 import { forgetToken } from "@/lib/api";
+import { forgetTheme } from "@/lib/theme";
 import { authClient } from "./client";
 
 // Neon's client reports problems as { error } instead of throwing. This turns one into text.
@@ -23,6 +24,7 @@ export async function resetSessionCache() {
 export async function signOutNow() {
   await authClient.signOut().catch(() => undefined);
   await resetSessionCache();
+  forgetTheme(); // signed out pages follow the device
 }
 
 // Only allow a path inside this site, so a crafted link cannot send people elsewhere.

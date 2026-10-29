@@ -1,8 +1,9 @@
 import re
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.policy import ALL_SCOPES
 
@@ -45,6 +46,7 @@ class UserOut(BaseModel):
     display_name: str
     created_at: datetime
     email_verified_at: datetime | None
+    theme: str
 
 
 class MeOut(BaseModel):
@@ -85,12 +87,21 @@ class TokenCreatedOut(TokenOut):
 
 
 class ProfileUpdate(BaseModel):
-    display_name: str = Field(min_length=1, max_length=100)
+    display_name: str | None = Field(default=None, min_length=1, max_length=100)
+    theme: Literal["system", "light", "dark"] | None = None
 
     @field_validator("display_name")
     @classmethod
-    def _strip(cls, value: str) -> str:
+    def _strip(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         value = value.strip()
         if not value:
             raise ValueError("name cannot be empty")
         return value
+
+    @model_validator(mode="after")
+    def _something_to_change(self) -> "ProfileUpdate":
+        if self.display_name is None and self.theme is None:
+            raise ValueError("send a display_name or a theme")
+        return self

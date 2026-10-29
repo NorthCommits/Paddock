@@ -10,7 +10,8 @@ import type { ReactNode } from "react";
 import useSWR from "swr";
 import { ApiError, fetchMe } from "@/lib/api";
 import { signOutNow } from "@/lib/auth/session";
-import { useTheme } from "@/lib/theme";
+import { useModKey } from "@/lib/shortcut";
+import { forgetTheme, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Wordmark } from "./brand";
 import { Palette } from "./Palette";
@@ -29,10 +30,14 @@ export function Shell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const { data: me, error } = useSWR("me", fetchMe, { shouldRetryOnError: false });
   const [theme, setTheme] = useTheme();
+  const mod = useModKey();
 
   useEffect(() => {
     if (!(error instanceof ApiError)) return;
-    if (error.status === 401) router.replace("/login");
+    if (error.status === 401) {
+      forgetTheme(); // no one is signed in, so follow the device
+      router.replace("/login");
+    }
     if (error.code === "onboarding_required") router.replace(`/welcome?next=${encodeURIComponent(path)}`);
   }, [error, router, path]);
   useEffect(() => setOpen(false), [path]);
@@ -185,7 +190,7 @@ export function Shell({ children }: { children: ReactNode }) {
           >
             <Search size={14} aria-hidden="true" />
             Search commands
-            <kbd className="rounded-sm bg-muted px-1 font-mono text-[11px]">Cmd K</kbd>
+            <kbd className="rounded-sm bg-muted px-1 font-mono text-[11px]">{mod} K</kbd>
           </button>
         </header>
         {me && !me.user.email_verified_at && (
