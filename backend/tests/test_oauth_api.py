@@ -463,3 +463,42 @@ async def test_approve_needs_the_bearer_header_not_a_cookie(client):
         "/v1/oauth/approve", json={**request_body(app["client_id"]), "decision": "allow"}
     )
     assert r.status_code == 401
+
+
+async def test_register_refuses_lookalike_hosts_and_invisible_names(client):
+    for uri in ["https://сlaude.ai/cb", "https://evil.com\\.claude.ai/cb"]:
+        r = await client.post("/oauth/register", json={"client_name": "x", "redirect_uris": [uri]})
+        assert r.status_code == 400 and r.json()["error"] == "invalid_redirect_uri", uri
+    for name in ["Claude‮", "Cl​aude"]:
+        r = await client.post(
+            "/oauth/register", json={"client_name": name, "redirect_uris": [REDIRECT]}
+        )
+        assert r.status_code == 400 and r.json()["error"] == "invalid_client_metadata", name
+
+
+async def test_lookalike_redirect_never_reaches_preview_or_approve(client):
+    data = await signup(client)
+    app = await register(client)
+    for path in ("/v1/oauth/preview", "/v1/oauth/approve"):
+        for bad in ["https://сlaude.ai/cb", "https://evil.com\\.claude.ai/cb"]:
+            r = await client.post(
+                path,
+                json={**request_body(app["client_id"], redirect_uri=bad), "decision": "allow"},
+                headers=csrf(data),
+            )
+            assert r.status_code == 400, (path, bad)
+
+
+async def test_preview_shows_the_real_host_and_port(client):
+    data = await signup(client)
+    uris = ["https://app.example.com:8443/cb", "http://[::1]:5555/cb", "cursor://anysphere/oauth"]
+    app = await register(client, uris=uris)
+    shown = []
+    for uri in uris:
+        r = await client.post(
+            "/v1/oauth/preview",
+            json=request_body(app["client_id"], redirect_uri=uri),
+            headers=csrf(data),
+        )
+        shown.append(r.json()["redirect_host"])
+    assert shown == ["app.example.com:8443", "[::1]:5555", "anysphere"]

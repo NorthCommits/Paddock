@@ -6,6 +6,7 @@ The access token is an ordinary agent token. There are no refresh tokens.
 import base64
 import hashlib
 import re
+import unicodedata
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
@@ -60,10 +61,10 @@ def _is_loopback(parts) -> bool:
 
 def redirect_ok(uri: str) -> bool:
     """Is this a redirect address we are willing to send a person back to?"""
-    # urlsplit silently drops tab, CR and LF, so refuse control and space characters first.
-    if "#" in uri or any(
-        c.isspace() or ord(c) < 0x21 or ord(c) == 0x7F or 0x80 <= ord(c) <= 0x9F for c in uri
-    ):
+    # Only printable ASCII: urlsplit silently drops tab, CR and LF, look-alike letters from other
+    # alphabets would pass for a trusted host on the consent page, and browsers treat a
+    # backslash as a path separator while we would not.
+    if "#" in uri or "\\" in uri or any(not 0x21 <= ord(c) <= 0x7E for c in uri):
         return False
     parts = _split(uri)
     if parts is None or parts.fragment or "@" in parts.netloc:
@@ -98,8 +99,12 @@ async def register_client(
         if len(uri) > MAX_URI_LENGTH or not redirect_ok(uri):
             raise OAuthError("invalid_redirect_uri", "A redirect address is not allowed.")
     name = client_name.strip()
-    if not name or len(name) > MAX_NAME_LENGTH:
-        raise OAuthError("invalid_client_metadata", "The client name must be 1 to 100 characters.")
+    invisible = any(unicodedata.category(c) in ("Cf", "Cc") for c in name)
+    if not name or len(name) > MAX_NAME_LENGTH or invisible:
+        raise OAuthError(
+            "invalid_client_metadata",
+            "The client name must be 1 to 100 characters with no control or invisible characters.",
+        )
     client = OAuthClient(client_id=new_secret()[:43], client_name=name, redirect_uris=redirect_uris)
     db.add(client)
     await db.flush()
@@ -165,6 +170,7 @@ async def approve(
 ) -> str:
     """Record that a signed-in person clicked Allow. Returns the raw single-use code."""
     raw = new_secret()
+    client.last_used_at = _now()  # a client in the middle of a flow is not stale
     db.add(
         OAuthCode(
             code_hash=sha256_hex(raw),
@@ -189,12 +195,25 @@ async def approve(
     return raw
 
 
+async def deny(db: AsyncSession, user: User, client: OAuthClient, *, ip: str | None) -> None:
+    """Record that a signed-in person clicked Deny. No code and no token are made."""
+    audit.record(
+        db,
+        action="oauth.deny",
+        user_id=user.id,
+        target_type="oauth_client",
+        target_id=client.client_id,
+        ip=ip,
+    )
+    await db.commit()
+
+
 def _pkce_matches(verifier: str, challenge: str) -> bool:
     digest = hashlib.sha256(verifier.encode()).digest()
     return same_value(base64.urlsafe_b64encode(digest).rstrip(b"=").decode(), challenge)
 
 
-async def _revoke_for_reuse(db: AsyncSession, row: OAuthCode) -> None:
+async def _revoke_for_reuse(db: AsyncSession, row: OAuthCode, ip: str | None) -> None:
     """A used code came back: take away what it produced."""
     stmt = update(ApiToken).where(ApiToken.revoked_at.is_(None))
     if row.token_id is not None:
@@ -206,7 +225,16 @@ async def _revoke_for_reuse(db: AsyncSession, row: OAuthCode) -> None:
             ApiToken.client_id == row.client_id,
             ApiToken.source == "oauth",
         )
-    await db.execute(stmt.values(revoked_at=_now()))
+    revoked = (await db.execute(stmt.values(revoked_at=_now()).returning(ApiToken.id))).scalars()
+    audit.record(
+        db,
+        action="oauth.code_reuse",
+        user_id=row.user_id,
+        target_type="oauth_client",
+        target_id=row.client_id,
+        ip=ip,
+        meta={"revoked_tokens": [str(i) for i in revoked]},
+    )
     await db.commit()
 
 
@@ -229,7 +257,7 @@ async def exchange(
         await db.rollback()
         raise fail
     if row.used_at is not None:
-        await _revoke_for_reuse(db, row)
+        await _revoke_for_reuse(db, row, ip)
         raise fail
     client = await get_client(db, client_id)
     valid = (
@@ -252,16 +280,29 @@ async def exchange(
     now = _now()
     row.used_at = now
     client.last_used_at = now
-    await db.execute(
-        update(ApiToken)
-        .where(
-            ApiToken.user_id == user.id,
-            ApiToken.client_id == client.client_id,
-            ApiToken.source == "oauth",
-            ApiToken.revoked_at.is_(None),
+    older = (
+        await db.execute(
+            update(ApiToken)
+            .where(
+                ApiToken.user_id == user.id,
+                ApiToken.client_id == client.client_id,
+                ApiToken.source == "oauth",
+                ApiToken.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+            .returning(ApiToken.id)
         )
-        .values(revoked_at=now)
-    )
+    ).scalars()
+    for old_id in older:
+        audit.record(
+            db,
+            action="oauth.reconnect_revoke",
+            user_id=user.id,
+            token_id=old_id,
+            target_type="oauth_client",
+            target_id=client.client_id,
+            ip=ip,
+        )
     audit.record(
         db,
         action="oauth.token",

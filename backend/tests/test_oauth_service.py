@@ -331,3 +331,60 @@ async def test_token_create_without_commit_waits_for_the_caller(client):
         await db.commit()
         async with get_sessionmaker()() as other:
             assert await other.scalar(select(ApiToken)) is not None
+
+
+def test_redirect_ok_refuses_lookalike_and_backslash_hosts():
+    assert not oauth.redirect_ok("https://сlaude.ai/cb")  # Cyrillic es
+    assert not oauth.redirect_ok("https://evil.com\\.claude.ai/cb")
+    assert not oauth.redirect_ok("https://app.example.com/cb\\x")
+    assert not oauth.redirect_ok("https://app.example.com/café")
+    assert not oauth.redirect_ok("https://app.example.com/​cb")
+    assert oauth.redirect_ok("https://app.example.com/cb")
+
+
+async def test_register_refuses_invisible_characters_in_the_name(client):
+    async with get_sessionmaker()() as db:
+        for name in ["Claude‮", "Cl​aude", "Claude\x07", "﻿Claude"]:
+            with pytest.raises(oauth.OAuthError) as err:
+                await oauth.register_client(db, client_name=name, redirect_uris=[REDIRECT])
+            assert err.value.code == "invalid_client_metadata", name
+        await oauth.register_client(db, client_name="Claude Desktop", redirect_uris=[REDIRECT])
+
+
+async def test_approve_marks_the_client_as_used(client):
+    user = await _user(client)
+    async with get_sessionmaker()() as db:
+        app = await _register(db)
+        assert app.last_used_at is None
+        await _approve(db, user, app)
+    async with get_sessionmaker()() as db:
+        assert (await oauth.get_client(db, app.client_id)).last_used_at is not None
+
+
+async def _audit_actions(**where):
+    from app.db.models import AuditLog
+
+    async with get_sessionmaker()() as db:
+        rows = (await db.scalars(select(AuditLog).order_by(AuditLog.created_at))).all()
+    return [r for r in rows if r.action.startswith("oauth.")]
+
+
+async def test_reuse_and_reconnect_and_deny_are_audited(client):
+    user = await _user(client)
+    async with get_sessionmaker()() as db:
+        app = await _register(db)
+        first = await _approve(db, user, app)
+        await _exchange(db, app, first)
+        second = await _approve(db, user, app)
+        await _exchange(db, app, second)  # reconnect: the older token is revoked
+        with pytest.raises(oauth.OAuthError):
+            await _exchange(db, app, second)  # reuse
+        await oauth.deny(db, user, app, ip="1.2.3.4")
+    actions = [r.action for r in await _audit_actions()]
+    assert actions.count("oauth.reconnect_revoke") == 1
+    assert actions.count("oauth.code_reuse") == 1
+    assert actions.count("oauth.deny") == 1
+    reuse = next(r for r in await _audit_actions() if r.action == "oauth.code_reuse")
+    assert len(reuse.meta["revoked_tokens"]) == 1
+    revoke = next(r for r in await _audit_actions() if r.action == "oauth.reconnect_revoke")
+    assert revoke.token_id is not None and revoke.user_id == user.id

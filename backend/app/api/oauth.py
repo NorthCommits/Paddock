@@ -220,10 +220,23 @@ async def checked(db, body: AuthRequestIn):
     return client, scopes
 
 
+def display_host(uri: str) -> str:
+    """The host the browser will really go to, with its port. Custom schemes show the scheme."""
+    parts = urlsplit(uri)
+    if not parts.hostname:
+        return parts.scheme
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    return f"{host}:{port}" if port else host
+
+
 @router.post("/v1/oauth/preview", response_model=PreviewOut)
 async def preview(body: AuthRequestIn, db: DbDep, actor: VerifiedPersonDep):
     client, scopes = await checked(db, body)
-    host = urlsplit(body.redirect_uri).netloc or urlsplit(body.redirect_uri).scheme
+    host = display_host(body.redirect_uri)
     return PreviewOut(client_name=client.client_name, redirect_host=host, scopes=scopes)
 
 
@@ -233,6 +246,7 @@ async def preview(body: AuthRequestIn, db: DbDep, actor: VerifiedPersonDep):
 async def approve(body: ApproveIn, request: Request, db: DbDep, actor: VerifiedPersonDep):
     client, scopes = await checked(db, body)
     if body.decision == "deny":
+        await oauth.deny(db, actor.user, client, ip=client_ip(request))
         denied = with_query(
             body.redirect_uri,
             error="access_denied",
