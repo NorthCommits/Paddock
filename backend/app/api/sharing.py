@@ -123,5 +123,5 @@ async def shared_page(token: str, db: DbDep):
     "/shared/{token}/view-url", response_model=ViewUrlOut, dependencies=[Depends(limit("view"))]
 )
 async def shared_view_url(token: str, db: DbDep):
-    url, expires = await sharing.shared_view_url(db, token)
-    return ViewUrlOut(url=url, expires_at=expires)
+    url, expires, number = await sharing.shared_view_url(db, token)
+    return ViewUrlOut(url=url, expires_at=expires, version=number)

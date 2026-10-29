@@ -8,10 +8,13 @@ a page (style.css, app.js, images) keep working and it also works inside a frame
 Every response, errors included, carries the security headers.
 """
 
+import re
+from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +23,31 @@ from app.core.signing import read_content_token
 from app.db.models import Page, PageVersion, VersionFile
 from app.db.session import get_session
 from app.services.storage import get_storage
+
+BRIDGE_PATH = "/_paddock/bridge.js"
+MAX_INJECTED_HTML = 8 * 1024 * 1024  # larger pages are served as they are, without the helper
+
+
+@lru_cache
+def bridge_source() -> bytes:
+    return Path(__file__).with_name("content_bridge.js").read_bytes()
+
+
+def with_bridge(html: bytes) -> bytes:
+    """Add the helper script to a page, so the app can update parts of it and anchor comments.
+
+    It goes just before the closing body tag (or at the end). The helper does nothing unless the
+    page is shown inside the Paddock app, and it only listens to messages from that origin.
+    """
+    origin = get_settings().app_origin.rstrip("/")
+    tag = (
+        f'<script src="{BRIDGE_PATH}" data-paddock-bridge data-app-origin="{origin}"></script>'
+    ).encode()
+    closing = list(re.finditer(rb"</body\s*>", html, re.IGNORECASE))
+    if closing:
+        at = closing[-1].start()
+        return html[:at] + tag + html[at:]
+    return html + tag
 
 
 def security_headers() -> dict[str, str]:
@@ -55,7 +83,23 @@ def create_content_app() -> FastAPI:
 
     @app.get("/healthz")
     async def healthz():
-        return {"status": "ok"}
+        # The app asks this from the browser to learn the server is really awake (rather than
+        # showing the host's waking-up screen), so it may read the answer.
+        return JSONResponse(
+            {"status": "ok"},
+            headers={
+                "Access-Control-Allow-Origin": get_settings().app_origin.rstrip("/"),
+                "Cache-Control": "no-store",
+            },
+        )
+
+    @app.get(BRIDGE_PATH)
+    async def bridge():
+        return Response(
+            bridge_source(),
+            media_type="text/javascript",
+            headers={"Cache-Control": "public, max-age=300"},
+        )
 
     @app.get("/c/{token}/{path:path}")
     async def serve(token: str, path: str, db: Annotated[AsyncSession, Depends(get_session)]):
@@ -87,6 +131,18 @@ def create_content_app() -> FastAPI:
             )
         if record is None:
             return not_found()
+
+        if (
+            record.content_type.split(";")[0].strip().lower() == "text/html"
+            and record.size_bytes <= MAX_INJECTED_HTML
+        ):
+            raw = b"".join([chunk async for chunk in get_storage().open(record.sha256)])
+            body = with_bridge(raw)
+            return Response(
+                body,
+                media_type=record.content_type,
+                headers={"Cache-Control": "private, max-age=300"},
+            )
 
         return StreamingResponse(
             get_storage().open(record.sha256),

@@ -4,22 +4,21 @@ import { ArrowLeft, Bot, ExternalLink, History, MessageSquare, LogOut, Pencil, R
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
-import { CommentsPanel } from "@/components/comments-panel";
+import { CommentsPanel, markNumbers, useThreads } from "@/components/comments-panel";
+import { PageFrame } from "@/components/page-frame";
 import { ShareSheet } from "@/components/share-sheet";
 import { UploadSheet } from "@/components/upload-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WakeHint } from "@/components/wake-hint";
 import { ApiError, ROLE_LABEL, api, fetchMe } from "@/lib/api";
-import type { Page, Publish, Version, VersionList, ViewUrl } from "@/lib/api";
+import type { Anchor, Page, Publish, Version, VersionList, ViewUrl } from "@/lib/api";
 import { ago, bytes } from "@/lib/format";
 import { useLive } from "@/lib/live";
 import { cn } from "@/lib/utils";
-import { waitForContent } from "@/lib/warm";
 
 const TWELVE_MINUTES = 12 * 60 * 1000; // view links last 15 minutes
 
@@ -49,13 +48,18 @@ export default function PageViewer() {
   const view = useSWR(
     ["view", id, picked ?? "latest"],
     () => api<ViewUrl>(`/v1/pages/${id}/view-url`, { method: "POST", body: { version: picked } }),
-    { refreshInterval: TWELVE_MINUTES, revalidateOnFocus: false, shouldRetryOnError: false },
+    { refreshInterval: TWELVE_MINUTES, revalidateOnFocus: false, shouldRetryOnError: false, keepPreviousData: true },
   );
-  // The content server may be asleep. Wait for it here instead of showing the host's waking-up screen.
-  const awake = useSWR(view.data ? "content-awake" : null, waitForContent, {
-    revalidateOnFocus: false,
-    dedupingInterval: 5 * 60 * 1000,
-  });
+
+  // Comments that point at a spot on the page: numbered markers on the page, and the attached spot in the composer.
+  const [draft, setDraft] = useState<Anchor | null>(null);
+  const [activeThread, setActiveThread] = useState<string | null>(null);
+  const [focus, setFocus] = useState<{ anchor: Anchor; key: number } | null>(null);
+  const open = useThreads(id, "open");
+  const marks = useMemo(() => {
+    const numbers = markNumbers(open.data?.items);
+    return (open.data?.items ?? []).flatMap((t) => (t.anchor && numbers.has(t.id) ? [{ id: t.id, n: numbers.get(t.id)!, anchor: t.anchor }] : []));
+  }, [open.data]);
 
   // Changes made by other people or by an agent arrive here at once, so the screen stays current.
   const { mutate: refetch } = useSWRConfig();
@@ -201,19 +205,22 @@ export default function PageViewer() {
         <div className="relative min-w-0 flex-1 bg-muted">
           {view.error ? (
             <p role="alert" className="p-6 text-[13px] text-destructive">{(view.error as Error).message}</p>
-          ) : !view.data || !awake.data ? (
-            <div className="space-y-3 p-6">
-              <Skeleton className="h-[40vh] w-full" />
-              <WakeHint what="The page server" />
-            </div>
           ) : (
-            <iframe
-              key={view.data.url}
+            <PageFrame
+              url={view.data?.url}
+              version={view.data?.version}
               title={p ? `${p.title}, version ${shown}` : "Page"}
-              src={view.data.url}
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
-              referrerPolicy="no-referrer"
-              className="absolute inset-0 size-full border-0 bg-white"
+              marks={marks}
+              focus={focus}
+              onComment={(anchor) => {
+                setDraft(anchor);
+                setShowComments(true);
+              }}
+              onMark={(threadId) => {
+                setActiveThread(threadId);
+                setShowComments(true);
+              }}
+              onMissing={() => setNotice("That part is not in this version.")}
             />
           )}
           <AnimatePresence>
@@ -242,7 +249,17 @@ export default function PageViewer() {
               transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
               className="absolute inset-y-0 right-0 z-10 overflow-hidden border-l border-border bg-background md:static"
             >
-              <CommentsPanel pageId={id} role={p.role} me={me.data?.user.id} version={shown} onClose={() => setShowComments(false)} />
+              <CommentsPanel
+                pageId={id}
+                role={p.role}
+                me={me.data?.user.id}
+                version={shown}
+                draft={draft}
+                onDraft={setDraft}
+                activeId={activeThread}
+                onShow={(anchor) => setFocus({ anchor, key: Date.now() })}
+                onClose={() => setShowComments(false)}
+              />
             </motion.aside>
           )}
           {showHistory && (

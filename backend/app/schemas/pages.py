@@ -117,3 +117,4 @@ class PublishOut(BaseModel):
 class ViewUrlOut(BaseModel):
     url: str
     expires_at: datetime
+    version: int

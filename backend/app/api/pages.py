@@ -177,5 +177,5 @@ async def rollback_version(
 )
 async def view_url(page_id: uuid.UUID, db: DbDep, actor: ActorDep, body: ViewUrlIn | None = None):
     """A short-lived link to the page on the content origin."""
-    url, expires = await pages.view_url(db, actor, page_id, body.version if body else None)
-    return ViewUrlOut(url=url, expires_at=expires)
+    url, expires, number = await pages.view_url(db, actor, page_id, body.version if body else None)
+    return ViewUrlOut(url=url, expires_at=expires, version=number)

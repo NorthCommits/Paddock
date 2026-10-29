@@ -164,6 +164,18 @@ Open items:
 6. **The authorize endpoint redirects errors without a page.** For a registered address, errors such as a bad scope redirect straight to it with `error` and `state`, with no person seeing a page. That makes the API host an open redirector for registered addresses only (RFC 9700 section 4.11.2). Accepted: the address must have been registered, never carries a code, and unregistered addresses are never redirected to.
 7. **A retried token call loses the token.** A client that repeats the token call with an already used code gets `invalid_grant` and, by design, the token it got from the first call is revoked. It must sign in again.
 
+## The page helper script (added with in-place updates and comments on the page)
+
+The content server adds one small script (`app/content_bridge.js`) to every HTML page it serves. It
+does nothing unless the page is inside a frame, and it only accepts messages whose origin is the app
+origin in `data-app-origin` (and whose source is the parent window). It sends only anchors the person
+chose, the words of the part they clicked or selected, and status messages, and only to that origin.
+It can fetch other versions of the same page because the frame shares the content origin, and it
+changes the page only when the page still matches what the server sent and no scripts differ;
+otherwise it asks the app to reload. The content origin still has no cookies and no access to the app
+(`/healthz` is readable from the app origin only, so the app can tell the server is awake).
+Pages that contain their own script run that script as before; the helper adds no new reach to it.
+
 ## Open items and limits
 
 1. **Single instance.** The rate limiter, the live event hub and the retention loop live in the

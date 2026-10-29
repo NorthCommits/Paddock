@@ -10,14 +10,3 @@ export function warmServers() {
   // Not awaited. Our server answers once the database is up and has started waking the content server.
   fetch("/api/warm", { cache: "no-store", keepalive: true }).catch(() => {});
 }
-
-// Resolves once the content server answers properly (or the wait ends), so a page is never opened
-// onto the host's own "waking up" screen.
-export async function waitForContent(): Promise<boolean> {
-  try {
-    await fetch("/api/warm?wait=content", { cache: "no-store" });
-  } catch {
-    // Show the page anyway. The frame has its own error handling.
-  }
-  return true;
-}

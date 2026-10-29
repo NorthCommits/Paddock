@@ -552,13 +552,16 @@ async def delete_page(db: AsyncSession, actor, page_id: uuid.UUID, ip: str | Non
 
 async def view_url(
     db: AsyncSession, actor, page_id: uuid.UUID, number: int | None
-) -> tuple[str, datetime]:
+) -> tuple[str, datetime, int]:
     page = await get_for_actor(db, actor, page_id, "page.view")
     return await view_url_for(db, page, number)
 
 
-async def view_url_for(db: AsyncSession, page: Page, number: int | None) -> tuple[str, datetime]:
-    """A signed content link for a page the caller is already allowed to see."""
+async def view_url_for(
+    db: AsyncSession, page: Page, number: int | None
+) -> tuple[str, datetime, int]:
+    """A signed content link for a page the caller is already allowed to see, with the version
+    number it shows (so the screen can tell a new version from a refreshed link)."""
     if number is None:
         if page.current_version_id is None:
             raise AppError(404, "not_found", "This page has no versions yet")
@@ -573,4 +576,4 @@ async def view_url_for(db: AsyncSession, page: Page, number: int | None) -> tupl
     )
     entry = version.entry_path
     url = f"{settings.content_origin.rstrip('/')}/c/{token}/{entry}"
-    return url, datetime.fromtimestamp(expires, UTC)
+    return url, datetime.fromtimestamp(expires, UTC), version.number
