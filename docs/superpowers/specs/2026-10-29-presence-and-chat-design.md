@@ -19,10 +19,10 @@ second column next to the comments. Comments stay the lasting record. The chat i
 ### Presence
 
 - Avatars sit in the page header between the title and the Comments button. Each person has a
-  stable colour shown as a ring. Hover shows the name. More than 5 people collapse into a "+N" chip.
+  stable colour shown as a ring, picked in the browser from their id. Hover shows the name. More than 5 people collapse into a "+N" chip.
 - A person is here when their browser has the page open in a visible tab and has sent a heartbeat
   in the last 45 seconds. The client sends a heartbeat every 20 seconds, and a leave signal when the
-  tab closes or hides.
+  tab is hidden or the person leaves the page. A closed tab simply expires after 45 seconds.
 - Only signed-in people appear. People on an anonymous share link are not shown.
 - The viewer's own avatar is shown first with a ring, so the row is never empty.
 
@@ -47,7 +47,7 @@ second column next to the comments. Comments stay the lasting record. The chat i
 - Ruling: a private message creates a bell notification only if the recipient is not on the page
   at that moment. It never sends an email.
 - A sender may delete their own message. Owners may delete any message in `Everyone`.
-- Rate limit: 20 messages a minute per person.
+- Rate limit: 20 messages a minute per person. Unread dots live in the browser only for now.
 
 ### Data
 
@@ -58,14 +58,16 @@ second column next to the comments. Comments stay the lasting record. The chat i
 
 ### API
 
-- `POST /v1/pages/{id}/presence` heartbeat. `DELETE` for leave.
-- `GET /v1/pages/{id}/presence` returns who is here (id, handle, display name, colour index).
+- `POST /v1/pages/{id}/presence` heartbeat. `DELETE /v1/pages/{id}/presence` for leave.
+- `GET /v1/pages/{id}/people` returns everyone with access to the page (id, handle, display name) and whether each is here.
 - `GET /v1/pages/{id}/messages?with={user_id}&before=` returns `Everyone` when `with` is absent,
   otherwise the private thread with that person. Newest last, 50 per page.
 - `POST /v1/pages/{id}/messages` with `body` and optional `to`.
 - `DELETE /v1/messages/{id}`.
-- New live events on the existing page stream: `presence.changed` and `message.created`. A private
-  message event is sent only to the two people in it. Reconnects replay missed events.
+- New live events on the existing page stream: `presence.changed`, `message.created` and
+  `message.deleted`. They are pushed live only and are not stored in the events table, so they never
+  reach webhooks. A private message event goes only to the two people in it, and none of these
+  events go to agent tokens. After a reconnect the client refetches, as it already does for comments.
 
 ### Frontend
 
