@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.ratelimit import limit
 from app.schemas.pages import (
+    ContextIn,
     PageFields,
     PageListOut,
     PageOut,
@@ -92,6 +93,14 @@ async def update_page(
         visibility=body.visibility,
         ip=client_ip(request),
     )
+    return await pages.page_out(db, page, actor.user)
+
+
+@router.put("/{page_id}/context", response_model=PageOut)
+async def set_context(
+    page_id: uuid.UUID, body: ContextIn, request: Request, db: DbDep, actor: VerifiedActorDep
+):
+    page = await pages.set_context(db, actor, page_id, text=body.text, ip=client_ip(request))
     return await pages.page_out(db, page, actor.user)
 
 

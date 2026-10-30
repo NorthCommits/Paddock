@@ -1,7 +1,8 @@
 """Revision requests: what an @agent mention asks an agent to do (SDD section 5.4).
 
 awaiting --a person says yes--> open --claim--> claimed --complete--> done
-awaiting, open or claimed --dismiss--> dismissed
+claimed --agent asks--> needs_info --person answers or edits the brief--> open
+awaiting, open, claimed or needs_info --dismiss--> dismissed
 A request starts out awaiting when it needs someone's yes (see approvals.py), or open when the
 person who asked uses their own agent. Only the person who said yes has their agent offered the
 request. A claim that runs out goes back to open, and a yes that nobody's agent acts on within half
@@ -27,6 +28,7 @@ from app.db.models import (
 )
 from app.schemas.comments import RequestComment, RequestItemOut, RequestListOut
 from app.services import agents, approvals, audit, events, notifications
+from app.services import pages as pages_service
 from app.services.comments import (
     author_out,
     comment_created,
@@ -96,12 +98,25 @@ async def _items(db: AsyncSession, rows: list[RevisionRequest]) -> list[RequestI
         p.id: p
         for p in await db.scalars(select(Page).where(Page.id.in_({r.page_id for r in rows})))
     }
+    thread_ids = {c.parent_id or c.id for c in comments.values()}
+    threads: dict[uuid.UUID, list[Comment]] = {t: [] for t in thread_ids}
+    for c in await db.scalars(
+        select(Comment)
+        .where(
+            or_(Comment.id.in_(thread_ids), Comment.parent_id.in_(thread_ids)),
+            Comment.deleted_at.is_(None),
+        )
+        .order_by(Comment.created_at, Comment.id)
+    ):
+        threads[c.parent_id or c.id].append(c)
     users = await users_by_id(
         db,
         {c.author_user_id for c in comments.values() if c.author_user_id}
+        | {c.author_user_id for t in threads.values() for c in t if c.author_user_id}
         | {p.owner_id for p in pages.values()},
     )
     version_ids = {c.version_id for c in comments.values() if c.version_id}
+    version_ids |= {c.version_id for t in threads.values() for c in t if c.version_id}
     for r in rows:
         version_ids |= {v for v in (r.base_version_id, r.result_version_id) if v}
     numbers = await version_numbers(db, version_ids)
@@ -123,6 +138,18 @@ async def _items(db: AsyncSession, rows: list[RevisionRequest]) -> list[RequestI
                     version_number=numbers.get(c.version_id) if c.version_id else None,
                     anchor=c.anchor,
                 ),
+                page_context=p.context_note,
+                thread=[
+                    RequestComment(
+                        id=t.id,
+                        thread_id=t.parent_id or t.id,
+                        body=t.body,
+                        author=author_out(t, users),
+                        version_number=numbers.get(t.version_id) if t.version_id else None,
+                        anchor=t.anchor,
+                    )
+                    for t in threads[c.parent_id or c.id]
+                ],
             )
         )
     return items
@@ -227,6 +254,10 @@ async def claim(db: AsyncSession, actor, request_id: uuid.UUID, *, minutes: int,
         raise AppError(
             409, "awaiting_approval", "A person has not said yes to this request yet, so leave it"
         )
+    if request.status == "needs_info":
+        raise AppError(
+            409, "conflict", "This request is waiting for the person to answer a question"
+        )
     if request.approved_by_user_id != actor.user.id:
         raise AppError(403, "forbidden", "This request was approved for someone else's agent")
     if request.status == "claimed" and request.claimed_by_token_id != actor.token.id:
@@ -279,6 +310,7 @@ async def complete(
     result_version: int,
     reply: str | None,
     ip: str | None,
+    context: str | None = None,
 ):
     _need_agent(actor)
     request = await _load(db, actor, request_id)
@@ -298,6 +330,10 @@ async def complete(
             422, "validation_failed", "result_version must be published after the request was made"
         )
     comment = await db.get(Comment, request.comment_id)
+    if context and context.strip():
+        page = await db.get(Page, request.page_id)
+        pages_service.append_context(page, context, f"@{actor.user.handle}'s agent")
+        await events.emit(db, page.id, "page.updated", {"context": True})
     request.status = "done"
     request.result_version_id = version.id
     request.claim_expires_at = None
@@ -354,6 +390,73 @@ async def dismiss(
     audit.record(
         db,
         action="request.dismiss",
+        user_id=actor.user.id,
+        token_id=actor.token.id if actor.token else None,
+        target_type="request",
+        target_id=str(request.id),
+        ip=ip,
+    )
+    await db.commit()
+    return await _one(db, request)
+
+
+async def ask(db: AsyncSession, actor, request_id: uuid.UUID, *, question: str, ip: str | None):
+    """The agent that holds a request asks the person something it cannot work out from the page."""
+    _need_agent(actor)
+    request = await _load(db, actor, request_id)
+    if request.status != "claimed" or request.claimed_by_token_id != actor.token.id:
+        raise AppError(409, "conflict", "Claim this request first, then ask your question")
+    comment = await db.get(Comment, request.comment_id)
+    page = await db.get(Page, request.page_id)
+    await _reply(db, actor, request, comment, question, page.current_version_id)
+    request.status = "needs_info"
+    request.claimed_by_token_id = None
+    request.claim_expires_at = None
+    if request.requested_by:
+        notifications.add(
+            db,
+            request.requested_by,
+            "agent_question",
+            page_id=request.page_id,
+            request_id=request.id,
+            actor_id=actor.user.id,
+            body=f"An agent asks on {page.title}: {question[:80]}",
+        )
+    await events.emit(db, request.page_id, "request.needs_info", {"request_id": str(request.id)})
+    audit.record(
+        db,
+        action="request.ask",
+        user_id=actor.user.id,
+        token_id=actor.token.id,
+        target_type="request",
+        target_id=str(request.id),
+        ip=ip,
+    )
+    await db.commit()
+    return await _one(db, request)
+
+
+async def set_brief(db: AsyncSession, actor, request_id: uuid.UUID, *, brief: str, ip: str | None):
+    """The asker or the page owner writes the brief. Changing it also answers a question."""
+    request = await db.scalar(
+        select(RevisionRequest).where(RevisionRequest.id == request_id).with_for_update()
+    )
+    if request is None:
+        raise AppError(404, "not_found", "Request not found")
+    await _page_for(db, actor, request, "request.create")
+    page = await db.get(Page, request.page_id)
+    if actor.user.id not in (request.requested_by, page.owner_id):
+        raise AppError(403, "forbidden", "Only the person who asked, or the owner, can change this")
+    if request.status in ("done", "dismissed"):
+        raise AppError(409, "conflict", f"This request is already {request.status}")
+    request.brief = brief or None
+    if request.status == "needs_info":
+        request.status = "open"
+        await events.emit(db, request.page_id, "request.answered", {"request_id": str(request.id)})
+    await events.emit(db, request.page_id, "request.updated", {"request_id": str(request.id)})
+    audit.record(
+        db,
+        action="request.brief",
         user_id=actor.user.id,
         token_id=actor.token.id if actor.token else None,
         target_type="request",

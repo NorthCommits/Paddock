@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from app.api.deps import ActorDep, DbDep, client_ip
 from app.core.ratelimit import limit
 from app.schemas.comments import (
+    AskIn,
+    BriefIn,
     ClaimIn,
     CommentEdit,
     CommentIn,
@@ -50,6 +52,7 @@ async def create_comment(
         version=body.version,
         anchor=body.anchor,
         ip=client_ip(request),
+        brief=body.brief,
     )
 
 
@@ -90,7 +93,7 @@ async def resolve_comment(
 async def list_requests(
     db: DbDep,
     actor: ActorDep,
-    status: Literal["open", "claimed", "done", "dismissed"] | None = None,
+    status: Literal["open", "claimed", "needs_info", "done", "dismissed"] | None = None,
     page_id: uuid.UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ):
@@ -132,8 +135,31 @@ async def complete_request(
         request_id,
         result_version=body.result_version,
         reply=body.reply,
+        context=body.context,
         ip=client_ip(request),
     )
+
+
+@router.post(
+    "/v1/requests/{request_id}/ask",
+    response_model=RequestItemOut,
+    dependencies=[Depends(limit("request"))],
+)
+async def ask_requester(
+    request_id: uuid.UUID, body: AskIn, request: Request, db: DbDep, actor: ActorDep
+):
+    return await requests.ask(db, actor, request_id, question=body.question, ip=client_ip(request))
+
+
+@router.put(
+    "/v1/requests/{request_id}/brief",
+    response_model=RequestItemOut,
+    dependencies=[Depends(limit("comment"))],
+)
+async def set_brief(
+    request_id: uuid.UUID, body: BriefIn, request: Request, db: DbDep, actor: ActorDep
+):
+    return await requests.set_brief(db, actor, request_id, brief=body.brief, ip=client_ip(request))
 
 
 @router.post(

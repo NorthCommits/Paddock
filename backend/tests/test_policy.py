@@ -10,6 +10,7 @@ EXPECTED = {
     "comment.read": {"viewer", "commenter", "editor", "owner"},
     "events.read": {"viewer", "commenter", "editor", "owner"},
     "chat.write": {"viewer", "commenter", "editor", "owner"},
+    "page.context": {"editor", "owner"},
     "comment.create": {"commenter", "editor", "owner"},
     "request.create": {"commenter", "editor", "owner"},
     "version.publish": {"editor", "owner"},

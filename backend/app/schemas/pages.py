@@ -93,6 +93,7 @@ class PageOut(BaseModel):
     visibility: str
     owner_handle: str
     role: str  # the caller's role on this page: owner, editor, commenter or viewer
+    context: str = ""  # the page context note
     current_version: VersionOut | None
     created_at: datetime
     updated_at: datetime
@@ -118,3 +119,7 @@ class ViewUrlOut(BaseModel):
     url: str
     expires_at: datetime
     version: int
+
+
+class ContextIn(BaseModel):
+    text: str = Field(max_length=8000)

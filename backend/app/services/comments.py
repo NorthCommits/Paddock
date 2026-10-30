@@ -67,6 +67,7 @@ def request_out(
         approved_by=(approver.display_name or f"@{approver.handle}") if approver else None,
         asked=asked,
         my_offer=my_offer,
+        brief=r.brief,
     )
 
 
@@ -280,6 +281,7 @@ async def create(
     version: int | None,
     anchor: dict | None,
     ip: str | None,
+    brief: str | None = None,
 ) -> CommentOut:
     page = await get_for_actor(db, actor, page_id, "comment.create")
     parent = None
@@ -311,10 +313,17 @@ async def create(
             comment_id=comment.id,
             requested_by=actor.user.id,
             base_version_id=page.current_version_id,
+            brief=(brief or "").strip() or None,
         )
         db.add(request)
         await db.flush()
         routed = await approvals.route(db, page, comment, request, actor.user)
+    elif parent is not None and actor.is_person:
+        # A person answering in the thread of a request that is waiting for information.
+        asked = await _request_for(db, parent.id)
+        if asked is not None and asked.status == "needs_info":
+            asked.status = "open"
+            await events.emit(db, page.id, "request.answered", {"request_id": str(asked.id)})
     await comment_created(db, page, comment, request, actor.token is not None)
     audit.record(
         db,
@@ -429,7 +438,7 @@ async def delete(db: AsyncSession, actor, comment_id: uuid.UUID, *, ip: str | No
         raise AppError(403, "forbidden", "Only the author, an editor or the owner can delete this")
     comment.deleted_at = _now()
     request = await _request_for(db, comment.id)
-    if request is not None and request.status in ("awaiting", "open", "claimed"):
+    if request is not None and request.status in ("awaiting", "open", "claimed", "needs_info"):
         request.status = "dismissed"
         request.dismiss_reason = "The comment was deleted"
         request.claimed_by_token_id = None

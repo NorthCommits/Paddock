@@ -30,6 +30,9 @@ TOOLS = {
     "list_requests",
     "claim_request",
     "complete_request",
+    "ask_requester",
+    "set_request_brief",
+    "update_page_context",
 }
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
 INITIALIZE = {
@@ -598,3 +601,44 @@ async def test_lifespan_cleans_up_even_if_mcp_shutdown_fails(monkeypatch):
         async with main.lifespan(app):
             pass
     assert stopped == [True]
+
+
+async def test_brief_question_and_page_note_through_the_tools(client):
+    data, token = await agent_token(client)
+    page = (
+        await client.post(
+            "/v1/pages",
+            json={"title": "Report", "files": [{"path": "index.html", "content": "<p>x</p>"}]},
+            headers=auth(data),
+        )
+    ).json()["page"]
+    request_id = await ask(client, data, page["id"])
+    async with connected(token) as c:
+        noted = ok(
+            await c.call_tool(
+                "update_page_context", {"page_id": page["id"], "text": "Board audience."}
+            )
+        )
+        assert noted["context"] == "Board audience."
+        assert (
+            ok(await c.call_tool("get_page", {"page_id": page["id"]}))["context"]
+            == "Board audience."
+        )
+        ok(
+            await c.call_tool(
+                "set_request_brief", {"request_id": request_id, "brief": "Keep it to two lines."}
+            )
+        )
+        item = ok(await c.call_tool("list_requests", {}))["requests"][0]
+        assert (
+            item["brief"] == "Keep it to two lines." and item["page_context"] == "Board audience."
+        )
+        ok(await c.call_tool("claim_request", {"request_id": request_id}))
+        asked = ok(
+            await c.call_tool(
+                "ask_requester", {"request_id": request_id, "question": "Which two lines?"}
+            )
+        )
+        assert asked["status"] == "needs_info"
+        waiting = ok(await c.call_tool("list_requests", {"status": "needs_info"}))["requests"]
+        assert [r["id"] for r in waiting] == [request_id]
