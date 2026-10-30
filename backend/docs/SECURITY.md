@@ -151,6 +151,23 @@ Public link pages are not indexed by search engines.
 - An agent can ask a question only on a request it holds. Claiming a request that waits for an
   answer is refused. A person's reply or a brief change reopens it for the same approver.
 
+### 13. Invitation emails
+
+- The email names the person who invited you, the page title and what the role allows. It never
+  includes page content. The invitation link works once, for 7 days, and only for the invited
+  address once it is confirmed.
+- The optional personal message is plain text, up to 500 characters. It cannot contain a web
+  address (a scheme, `www.` or a domain followed by a path), so Paddock cannot be used to send
+  someone a link of the sender's choosing. The text is escaped in the HTML part and is never
+  stored. Only people who can manage sharing on a page can send one, and the `manage` rate limit
+  (20 a minute) applies.
+- Names and titles are collapsed to one short line before they go into the subject, so a title
+  cannot add a header to the email.
+- `Reply-To` is the inviter's own address, so the invited person can answer them. This shows the
+  inviter's email address to the person they chose to invite.
+- "Send again" creates a new invitation for the same address. The old link stops working, because
+  only a hash of each link is stored and the old one cannot be sent again.
+
 ## Other findings
 
 - **Errors.** Error bodies use a fixed shape with a request id. Stack traces are not returned.

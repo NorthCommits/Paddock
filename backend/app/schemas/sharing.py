@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import datetime
 from typing import Literal
@@ -7,15 +8,29 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 MemberRole = Literal["viewer", "commenter", "editor"]
 LinkRole = Literal["viewer", "commenter"]
 
+# A web address in a personal message: a scheme, www, or a domain followed by a path.
+_LINK = re.compile(r"https?:|www\.|[a-z0-9-]+\.[a-z]{2,}/", re.IGNORECASE)
+
 
 class InviteIn(BaseModel):
     email: EmailStr
     role: MemberRole = "viewer"
+    message: str | None = Field(default=None, max_length=500)  # a few warm words, emailed only
 
     @field_validator("email")
     @classmethod
     def _lower(cls, value: str) -> str:
         return value.lower()
+
+    @field_validator("message")
+    @classmethod
+    def _message(cls, value: str | None) -> str | None:
+        value = (value or "").strip()
+        if not value:
+            return None
+        if _LINK.search(value):
+            raise ValueError("A personal message cannot contain links")
+        return value
 
 
 class MemberUpdate(BaseModel):
