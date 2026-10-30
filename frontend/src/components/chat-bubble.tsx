@@ -246,7 +246,14 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
         className="pointer-events-auto relative flex size-12 items-center justify-center rounded-full bg-foreground text-background shadow-float transition-transform duration-150 hover:scale-105 motion-reduce:transition-none motion-reduce:hover:scale-100"
       >
         <MessageCircle size={20} aria-hidden="true" />
-        {total > 0 && <Dot className="absolute right-0.5 top-0.5 size-3 ring-2 ring-background" />}
+        {total > 0 && (
+          <span
+            aria-hidden="true"
+            className="tnum absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-signal px-1 text-[11px] font-bold leading-5 text-signal-foreground ring-2 ring-background"
+          >
+            {total > 9 ? "9+" : total}
+          </span>
+        )}
       </button>
     </div>
   );
