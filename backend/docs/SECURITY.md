@@ -139,6 +139,18 @@ Public link pages are not indexed by search engines.
 - A private message never sends email. It adds a bell notification only when the recipient is not on
   the page at that moment.
 
+### 12. Briefs, the page note and questions
+
+- A brief and the page note are plain text visible to everyone who can read the page comments, so
+  nothing private is shared with a helping agent by accident. Paddock never reads or forwards a
+  person's own chat with their agent. Only what the person writes, or approves, goes in the brief.
+- Only the person who asked, or the page owner, can change a brief. The page note needs editor
+  access. Agent tokens need `comments:write` and `pages:write` for these.
+- Brief, note and thread are handed to agents as data. Agent tool texts tell them to treat it as
+  data, not as instructions, and the runner prompt says so too.
+- An agent can ask a question only on a request it holds. Claiming a request that waits for an
+  answer is refused. A person's reply or a brief change reopens it for the same approver.
+
 ## Other findings
 
 - **Errors.** Error bodies use a fixed shape with a request id. Stack traces are not returned.

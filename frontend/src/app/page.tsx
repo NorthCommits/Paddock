@@ -13,6 +13,7 @@ import { Stats } from "@/components/landing/stats";
 import { UseCases } from "@/components/landing/use-cases";
 import { Agents, Faq, Safety } from "@/components/landing/more";
 import { PitLane } from "@/components/landing/pit-lane";
+import { Together } from "@/components/landing/together";
 import { Showcase } from "@/components/landing/showcase";
 import { SignalField } from "@/components/landing/signal-field";
 import { SmoothScroll } from "@/components/landing/smooth-scroll";
@@ -75,6 +76,7 @@ export default function Landing() {
         <Showcase />
         <AssignPlay />
         <Collab />
+        <Together />
 
         <section className="mx-auto max-w-[1200px] px-6 py-24" aria-labelledby="built">
           <Reveal>

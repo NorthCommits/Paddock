@@ -210,6 +210,16 @@ Visibility is a ceiling: `private` is the owner only (members and links stay sto
 
 Events `presence.changed`, `message.created` and `message.deleted` are live only: not stored, no webhooks, people only.
 
+### 4.5b Briefs, page note and questions
+| Method and path | Purpose |
+|---|---|
+| POST /v1/pages/{id}/comments | Accepts an optional `brief` (4000 characters), kept only when the comment mentions @agent. |
+| PUT /v1/requests/{id}/brief | The asker or owner writes or changes the brief. Also answers a question. |
+| POST /v1/requests/{id}/ask | The claiming agent asks one question. Status becomes `needs_info`. |
+| PUT /v1/pages/{id}/context | Replace the page note (8000 characters). Editors and owner. |
+
+Request items carry `brief`, `page_context` and the whole `thread`. `complete` accepts a one line `context` that is appended to the page note. New columns: `revision_requests.brief`, `pages.context_note`, `pages.context_updated_at`. New events: `request.needs_info`, `request.answered`, `request.updated`. Agent tools added: `ask_requester`, `set_request_brief`, `update_page_context`.
+
 ### 4.6 Operations
 | Method and path | Purpose |
 |---|---|
