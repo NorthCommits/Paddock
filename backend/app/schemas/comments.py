@@ -144,6 +144,7 @@ class RequestItemOut(RequestOut):
     page_context: str | None = None
     # The whole thread, oldest first, so a question and its answer travel with the request.
     thread: list[RequestComment] = []
+    thread_truncated: bool = False
 
 
 class RequestListOut(BaseModel):

@@ -195,8 +195,8 @@ export default function PageViewer() {
           <MessageSquare aria-hidden="true" /> Comments
         </Button>
         <Button size="sm" variant="secondary" onClick={() => setNoting(true)}>
-          <BookOpen aria-hidden="true" /> Context
-          {p?.context && <span aria-label="has notes" className="size-1.5 rounded-full bg-signal" />}
+          <BookOpen aria-hidden="true" /> Context{p?.context && <span className="sr-only"> (has notes)</span>}
+          {p?.context && <span aria-hidden="true" className="size-1.5 rounded-full bg-signal" />}
         </Button>
         <Button size="sm" variant={showHistory ? "default" : "secondary"} onClick={() => setShowHistory((v) => !v)} aria-pressed={showHistory}>
           <History aria-hidden="true" /> History

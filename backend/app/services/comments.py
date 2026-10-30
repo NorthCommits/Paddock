@@ -4,7 +4,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -220,6 +220,28 @@ def _request_for(db: AsyncSession, comment_id: uuid.UUID):
     return db.scalar(select(RevisionRequest).where(RevisionRequest.comment_id == comment_id))
 
 
+async def _answer_waiting(db: AsyncSession, page, root: Comment, user) -> RevisionRequest | None:
+    """A reply from the person who asked (or the owner) answers an agent's question in this thread.
+
+    The thread may hold the request on its first comment or on any reply.
+    """
+    waiting = await db.scalars(
+        select(RevisionRequest)
+        .join(Comment, Comment.id == RevisionRequest.comment_id)
+        .where(
+            RevisionRequest.page_id == page.id,
+            RevisionRequest.status == "needs_info",
+            or_(Comment.id == root.id, Comment.parent_id == root.id),
+        )
+        .with_for_update(of=RevisionRequest)
+    )
+    for request in waiting:
+        if user.id in (request.requested_by, page.owner_id):
+            await approvals.answered(db, request)
+            return request
+    return None
+
+
 def _token_id(actor) -> uuid.UUID | None:
     return actor.token.id if actor.token else None
 
@@ -307,7 +329,10 @@ async def create(
     # Only people ask agents for work. An agent mentioning @agent in its own text does not
     # start another request, so agents cannot trigger each other in a loop.
     request = None
-    if comment.mentions_agent and actor.is_person:
+    answered = None
+    if parent is not None and actor.is_person:
+        answered = await _answer_waiting(db, page, parent, actor.user)
+    if comment.mentions_agent and actor.is_person and answered is None:
         request = RevisionRequest(
             page_id=page.id,
             comment_id=comment.id,
@@ -318,12 +343,6 @@ async def create(
         db.add(request)
         await db.flush()
         routed = await approvals.route(db, page, comment, request, actor.user)
-    elif parent is not None and actor.is_person:
-        # A person answering in the thread of a request that is waiting for information.
-        asked = await _request_for(db, parent.id)
-        if asked is not None and asked.status == "needs_info":
-            asked.status = "open"
-            await events.emit(db, page.id, "request.answered", {"request_id": str(asked.id)})
     await comment_created(db, page, comment, request, actor.token is not None)
     audit.record(
         db,
@@ -402,7 +421,11 @@ async def edit(
             await approvals.reset(db, request)
             routed = await approvals.route(db, page, comment, request, actor.user)
             await request_event(db, page, request, "request.created", comment)
-        elif not wants and request is not None and request.status in ("open", "awaiting"):
+        elif (
+            not wants
+            and request is not None
+            and request.status in ("open", "awaiting", "needs_info")
+        ):
             request.status = "dismissed"
             request.dismiss_reason = "The mention was removed"
             await events.emit(

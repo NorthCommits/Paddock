@@ -26,12 +26,14 @@ export function ContextSheet({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Start from the saved note each time the sheet opens, but never replace what is being typed.
   useEffect(() => {
     if (open) {
       setText(page.context ?? "");
       setError("");
     }
-  }, [open, page.context]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function save() {
     setBusy(true);

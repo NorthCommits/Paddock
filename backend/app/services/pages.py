@@ -537,11 +537,19 @@ CONTEXT_LIMIT = 8000
 
 def append_context(page: Page, line: str, who: str) -> None:
     """Add a dated line to the page note. The oldest lines go first if the note grows too long."""
-    entry = f"- {_now():%Y-%m-%d} {who}: {line.strip()}"
-    note = f"{page.context_note}\n{entry}" if page.context_note else entry
-    while len(note) > CONTEXT_LIMIT and "\n" in note:
-        note = note.split("\n", 1)[1]
-    page.context_note = note[-CONTEXT_LIMIT:]
+    one_line = " ".join("".join(ch if ch.isprintable() else " " for ch in line).split())
+    entry = f"- {_now():%Y-%m-%d} {who}: {one_line}"
+    lines = (page.context_note or "").split("\n") if page.context_note else []
+    lines.append(entry)
+    # Make room by dropping the oldest lines an agent wrote. What people wrote is never dropped.
+    while len("\n".join(lines)) > CONTEXT_LIMIT:
+        old = next(
+            (i for i, x in enumerate(lines[:-1]) if "'s agent:" in x and x.startswith("- ")), None
+        )
+        if old is None:
+            return  # no room, so the note keeps what people wrote and the new line is skipped
+        del lines[old]
+    page.context_note = "\n".join(lines)
     page.context_updated_at = _now()
 
 

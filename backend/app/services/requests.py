@@ -85,7 +85,13 @@ async def _ask_again(db: AsyncSession) -> None:
         await approvals.release(db, request)
 
 
-async def _items(db: AsyncSession, rows: list[RevisionRequest]) -> list[RequestItemOut]:
+THREAD_LIMIT = 20  # the root comment plus this many of the latest replies
+
+
+async def _items(
+    db: AsyncSession, rows: list[RevisionRequest], detail: bool = False
+) -> list[RequestItemOut]:
+    """Request items. Only `detail` carries the page note and the thread, so a list stays small."""
     if not rows:
         return []
     comments = {
@@ -100,15 +106,19 @@ async def _items(db: AsyncSession, rows: list[RevisionRequest]) -> list[RequestI
     }
     thread_ids = {c.parent_id or c.id for c in comments.values()}
     threads: dict[uuid.UUID, list[Comment]] = {t: [] for t in thread_ids}
-    for c in await db.scalars(
-        select(Comment)
-        .where(
-            or_(Comment.id.in_(thread_ids), Comment.parent_id.in_(thread_ids)),
-            Comment.deleted_at.is_(None),
-        )
-        .order_by(Comment.created_at, Comment.id)
-    ):
-        threads[c.parent_id or c.id].append(c)
+    if detail:
+        for c in await db.scalars(
+            select(Comment)
+            .where(
+                or_(Comment.id.in_(thread_ids), Comment.parent_id.in_(thread_ids)),
+                Comment.deleted_at.is_(None),
+            )
+            .order_by(Comment.created_at, Comment.id)
+        ):
+            threads[c.parent_id or c.id].append(c)
+    truncated = {t for t, cs in threads.items() if len(cs) > THREAD_LIMIT + 1}
+    for t in truncated:
+        threads[t] = threads[t][:1] + threads[t][-THREAD_LIMIT:]
     users = await users_by_id(
         db,
         {c.author_user_id for c in comments.values() if c.author_user_id}
@@ -138,7 +148,8 @@ async def _items(db: AsyncSession, rows: list[RevisionRequest]) -> list[RequestI
                     version_number=numbers.get(c.version_id) if c.version_id else None,
                     anchor=c.anchor,
                 ),
-                page_context=p.context_note,
+                page_context=p.context_note if detail else None,
+                thread_truncated=(c.parent_id or c.id) in truncated,
                 thread=[
                     RequestComment(
                         id=t.id,
@@ -201,7 +212,7 @@ async def get_one(db: AsyncSession, actor, request_id: uuid.UUID) -> RequestItem
     await _page_for(db, actor, request, "comment.read")
     if actor.token is not None and request.approved_by_user_id != actor.user.id:
         raise AppError(404, "not_found", "Request not found")
-    return (await _items(db, [request]))[0]
+    return (await _items(db, [request], detail=True))[0]
 
 
 async def _page_for(db: AsyncSession, actor, request: RevisionRequest, action: str) -> None:
@@ -242,7 +253,7 @@ def _need_agent(actor) -> None:
 
 async def _one(db: AsyncSession, request: RevisionRequest) -> RequestItemOut:
     await db.refresh(request)
-    return (await _items(db, [request]))[0]
+    return (await _items(db, [request], detail=True))[0]
 
 
 async def claim(db: AsyncSession, actor, request_id: uuid.UUID, *, minutes: int, ip: str | None):
@@ -331,7 +342,7 @@ async def complete(
         )
     comment = await db.get(Comment, request.comment_id)
     if context and context.strip():
-        page = await db.get(Page, request.page_id)
+        page = await db.get(Page, request.page_id, with_for_update=True)
         pages_service.append_context(page, context, f"@{actor.user.handle}'s agent")
         await events.emit(db, page.id, "page.updated", {"context": True})
     request.status = "done"
@@ -451,8 +462,7 @@ async def set_brief(db: AsyncSession, actor, request_id: uuid.UUID, *, brief: st
         raise AppError(409, "conflict", f"This request is already {request.status}")
     request.brief = brief or None
     if request.status == "needs_info":
-        request.status = "open"
-        await events.emit(db, request.page_id, "request.answered", {"request_id": str(request.id)})
+        await approvals.answered(db, request)
     await events.emit(db, request.page_id, "request.updated", {"request_id": str(request.id)})
     audit.record(
         db,

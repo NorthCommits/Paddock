@@ -630,10 +630,9 @@ async def test_brief_question_and_page_note_through_the_tools(client):
             )
         )
         item = ok(await c.call_tool("list_requests", {}))["requests"][0]
-        assert (
-            item["brief"] == "Keep it to two lines." and item["page_context"] == "Board audience."
-        )
-        ok(await c.call_tool("claim_request", {"request_id": request_id}))
+        assert item["brief"] == "Keep it to two lines."
+        claimed = ok(await c.call_tool("claim_request", {"request_id": request_id}))
+        assert claimed["page_context"] == "Board audience."
         asked = ok(
             await c.call_tool(
                 "ask_requester", {"request_id": request_id, "question": "Which two lines?"}

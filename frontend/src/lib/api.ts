@@ -349,6 +349,7 @@ export const EVENT_GROUPS: { title: string; types: { id: string; label: string }
       { id: "request.claimed", label: "An agent claims a request" },
       { id: "request.reopened", label: "A claim runs out" },
       { id: "request.needs_info", label: "An agent asks a question" },
+      { id: "request.answered", label: "A question is answered" },
       { id: "request.completed", label: "A request is completed" },
       { id: "request.dismissed", label: "A request is dismissed" },
     ],
