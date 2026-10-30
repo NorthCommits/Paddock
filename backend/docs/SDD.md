@@ -159,7 +159,7 @@ Only the main contract is listed here. The OpenAPI schema generated from the cod
 | GET /v1/pages/{id}/members | List members (owner only). |
 | PATCH /v1/pages/{id}/members/{user_id} | Change a member's role. |
 | DELETE /v1/pages/{id}/members/{user_id} | Remove a member. A member can remove themselves (leave). |
-| POST /v1/pages/{id}/invites | Invite by email with a role. Emails the invitation and returns the accept link once. |
+| POST /v1/pages/{id}/invites | Invite by email with a role and an optional personal message (500 characters, no links). Emails the invitation with Reply-To set to the inviter and returns the accept link once. Posting again for the same address sends a fresh link and retires the old one. |
 | GET /v1/pages/{id}/invites | List pending invitations. |
 | DELETE /v1/pages/{id}/invites/{invite_id} | Revoke an invitation. |
 | GET /v1/invites/{token} | Preview an invitation (page title, inviter, role). Needs no login. |
@@ -280,7 +280,7 @@ open --dismiss--> dismissed
 
 ### 5.5 Sharing
 
-- Invites by email: creating an invite stores a hashed token, emails the invitation through the mailer and returns the accept link once, so the owner can also send it another way. Invitations last 7 days and work once. Accepting needs an account whose confirmed email is the invited address, so a forwarded link is useless to anyone else. A new invitation to the same address replaces the old one.
+- Invites by email: creating an invite stores a hashed token, emails the invitation through the mailer and returns the accept link once, so the owner can also send it another way. Invitations last 7 days and work once. Accepting needs an account whose confirmed email is the invited address, so a forwarded link is useless to anyone else. A new invitation to the same address replaces the old one, which is how "Send again" works. The email names the inviter and the page, explains the role in plain words, can carry a short personal message, and sets Reply-To to the inviter.
 - Share links can be revoked and can expire. A link never grants editing rights. A link stops working when the page is not set to `link`, is deleted, or the link is revoked or expired; all of these give the same 404. Limits per page: 50 members, 50 pending invitations, 20 live links.
 - Link pages are served with `X-Robots-Tag: noindex`.
 
