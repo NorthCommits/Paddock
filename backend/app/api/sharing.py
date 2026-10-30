@@ -57,7 +57,7 @@ async def create_invite(
     page_id: uuid.UUID, body: InviteIn, request: Request, db: DbDep, actor: VerifiedActorDep
 ):
     return await sharing.create_invite(
-        db, actor, page_id, body.email, body.role, client_ip(request)
+        db, actor, page_id, body.email, body.role, client_ip(request), body.message
     )
 
 

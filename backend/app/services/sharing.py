@@ -135,7 +135,13 @@ def _invite_out(i: PageInvite) -> InviteOut:
 
 
 async def create_invite(
-    db: AsyncSession, actor, page_id: uuid.UUID, email: str, role: str, ip: str | None
+    db: AsyncSession,
+    actor,
+    page_id: uuid.UUID,
+    email: str,
+    role: str,
+    ip: str | None,
+    message: str | None = None,
 ) -> InviteCreatedOut:
     page = await pages.get_for_actor(db, actor, page_id, "page.manage_sharing", lock=True)
     owner = await db.get(User, page.owner_id)
@@ -197,7 +203,16 @@ async def create_invite(
 
     url = f"{get_settings().app_origin}/invites/{raw}"
     emailed = await mailer.send_quietly(
-        emails.page_invite(email, actor.user.display_name, page.title, role, url, INVITE_DAYS)
+        emails.page_invite(
+            email,
+            actor.user.display_name,
+            page.title,
+            role,
+            url,
+            INVITE_DAYS,
+            message=message,
+            reply_to=actor.user.email,
+        )
     )
     return InviteCreatedOut(**_invite_out(invite).model_dump(), accept_url=url, emailed=emailed)
 

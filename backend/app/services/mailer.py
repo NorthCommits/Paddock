@@ -24,6 +24,7 @@ class Message:
     subject: str
     text: str
     html: str | None = None
+    reply_to: str | None = None
 
 
 class ConsoleMailer:
@@ -52,6 +53,8 @@ class SmtpMailer:
         mail["From"] = s.email_from
         mail["To"] = message.to
         mail["Subject"] = message.subject
+        if message.reply_to:
+            mail["Reply-To"] = message.reply_to
         mail.set_content(message.text)
         if message.html:
             mail.add_alternative(message.html, subtype="html")
