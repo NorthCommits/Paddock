@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bot, ExternalLink, History, MessageSquare, LogOut, Pencil, RotateCcw, Share2, Trash2, Upload, User, X } from "lucide-react";
+import { ArrowLeft, Bot, BookOpen, ExternalLink, History, MessageSquare, LogOut, Pencil, RotateCcw, Share2, Trash2, Upload, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { AddAgentHint } from "@/components/add-agent-hint";
 import { ChatBubble } from "@/components/chat-bubble";
+import { ContextSheet } from "@/components/context-sheet";
 import { CommentsPanel, markNumbers, useThreads } from "@/components/comments-panel";
 import { PageFrame } from "@/components/page-frame";
 import { PresenceRow } from "@/components/presence-row";
@@ -39,6 +40,7 @@ export default function PageViewer() {
   const [showComments, setShowComments] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [noting, setNoting] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const me = useSWR("me", fetchMe);
   usePresence(id);
@@ -191,6 +193,10 @@ export default function PageViewer() {
         )}
         <Button size="sm" variant={showComments ? "default" : "secondary"} onClick={() => setShowComments((v) => !v)} aria-pressed={showComments}>
           <MessageSquare aria-hidden="true" /> Comments
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setNoting(true)}>
+          <BookOpen aria-hidden="true" /> Context{p?.context && <span className="sr-only"> (has notes)</span>}
+          {p?.context && <span aria-hidden="true" className="size-1.5 rounded-full bg-signal" />}
         </Button>
         <Button size="sm" variant={showHistory ? "default" : "secondary"} onClick={() => setShowHistory((v) => !v)} aria-pressed={showHistory}>
           <History aria-hidden="true" /> History
@@ -373,6 +379,18 @@ export default function PageViewer() {
         </div>
       </Sheet>
 
+      {p && (
+        <ContextSheet
+          open={noting}
+          onOpenChange={setNoting}
+          page={p}
+          canEdit={canEdit}
+          onSaved={async () => {
+            await page.mutate();
+            setNotice("Context saved.");
+          }}
+        />
+      )}
       {p && isOwner && (
         <ShareSheet open={sharing} onClose={() => setSharing(false)} page={p} onPageChanged={async () => { await page.mutate(); }} />
       )}

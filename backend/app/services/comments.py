@@ -4,7 +4,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -67,6 +67,7 @@ def request_out(
         approved_by=(approver.display_name or f"@{approver.handle}") if approver else None,
         asked=asked,
         my_offer=my_offer,
+        brief=r.brief,
     )
 
 
@@ -219,6 +220,28 @@ def _request_for(db: AsyncSession, comment_id: uuid.UUID):
     return db.scalar(select(RevisionRequest).where(RevisionRequest.comment_id == comment_id))
 
 
+async def _answer_waiting(db: AsyncSession, page, root: Comment, user) -> RevisionRequest | None:
+    """A reply from the person who asked (or the owner) answers an agent's question in this thread.
+
+    The thread may hold the request on its first comment or on any reply.
+    """
+    waiting = await db.scalars(
+        select(RevisionRequest)
+        .join(Comment, Comment.id == RevisionRequest.comment_id)
+        .where(
+            RevisionRequest.page_id == page.id,
+            RevisionRequest.status == "needs_info",
+            or_(Comment.id == root.id, Comment.parent_id == root.id),
+        )
+        .with_for_update(of=RevisionRequest)
+    )
+    for request in waiting:
+        if user.id in (request.requested_by, page.owner_id):
+            await approvals.answered(db, request)
+            return request
+    return None
+
+
 def _token_id(actor) -> uuid.UUID | None:
     return actor.token.id if actor.token else None
 
@@ -280,6 +303,7 @@ async def create(
     version: int | None,
     anchor: dict | None,
     ip: str | None,
+    brief: str | None = None,
 ) -> CommentOut:
     page = await get_for_actor(db, actor, page_id, "comment.create")
     parent = None
@@ -305,12 +329,16 @@ async def create(
     # Only people ask agents for work. An agent mentioning @agent in its own text does not
     # start another request, so agents cannot trigger each other in a loop.
     request = None
-    if comment.mentions_agent and actor.is_person:
+    answered = None
+    if parent is not None and actor.is_person:
+        answered = await _answer_waiting(db, page, parent, actor.user)
+    if comment.mentions_agent and actor.is_person and answered is None:
         request = RevisionRequest(
             page_id=page.id,
             comment_id=comment.id,
             requested_by=actor.user.id,
             base_version_id=page.current_version_id,
+            brief=(brief or "").strip() or None,
         )
         db.add(request)
         await db.flush()
@@ -393,7 +421,11 @@ async def edit(
             await approvals.reset(db, request)
             routed = await approvals.route(db, page, comment, request, actor.user)
             await request_event(db, page, request, "request.created", comment)
-        elif not wants and request is not None and request.status in ("open", "awaiting"):
+        elif (
+            not wants
+            and request is not None
+            and request.status in ("open", "awaiting", "needs_info")
+        ):
             request.status = "dismissed"
             request.dismiss_reason = "The mention was removed"
             await events.emit(
@@ -429,7 +461,7 @@ async def delete(db: AsyncSession, actor, comment_id: uuid.UUID, *, ip: str | No
         raise AppError(403, "forbidden", "Only the author, an editor or the owner can delete this")
     comment.deleted_at = _now()
     request = await _request_for(db, comment.id)
-    if request is not None and request.status in ("awaiting", "open", "claimed"):
+    if request is not None and request.status in ("awaiting", "open", "claimed", "needs_info"):
         request.status = "dismissed"
         request.dismiss_reason = "The comment was deleted"
         request.claimed_by_token_id = None

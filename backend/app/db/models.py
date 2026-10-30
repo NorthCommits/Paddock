@@ -157,6 +157,9 @@ class Page(Base):
     created_at: Mapped[datetime] = _now_column()
     updated_at: Mapped[datetime] = _now_column(onupdate=func.now())
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Decisions, constraints and terms that any person or agent working on the page should know.
+    context_note: Mapped[str | None] = mapped_column(Text)
+    context_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         # A slug is unique per owner, but a deleted page frees its slug.
@@ -351,7 +354,7 @@ class RevisionRequest(Base):
         ForeignKey("page_versions.id", ondelete="SET NULL")
     )
     # awaiting (a person must say yes), open (approved, ready for that person's agent), claimed,
-    # done or dismissed.
+    # needs_info (the agent asked a question), done or dismissed.
     status: Mapped[str] = mapped_column(String(10), default="open", server_default="open")
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
@@ -363,6 +366,8 @@ class RevisionRequest(Base):
         ForeignKey("page_versions.id", ondelete="SET NULL")
     )
     dismiss_reason: Mapped[str | None] = mapped_column(Text)
+    # What the person (or their own Claude) knows that the page and comment do not say.
+    brief: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _now_column()
     updated_at: Mapped[datetime] = _now_column(onupdate=func.now())
 

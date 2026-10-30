@@ -31,6 +31,7 @@ ACTIONS = {
     "version.publish": ("editor", "pages:write"),
     "request.act": ("editor", "requests:act"),
     "page.update": ("owner", "pages:write"),
+    "page.context": ("editor", "pages:write"),
     "page.manage_sharing": ("owner", "pages:write"),
     "page.delete": ("owner", "pages:write"),
 }

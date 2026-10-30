@@ -142,6 +142,7 @@ async def page_outs(db: AsyncSession, pages: list[Page], user: User) -> list[Pag
             visibility=p.visibility,
             owner_handle=owners.get(p.owner_id, ""),
             role="owner" if p.owner_id == user.id else member_roles.get(p.id, "viewer"),
+            context=p.context_note or "",
             current_version=outs.get(p.current_version_id) if p.current_version_id else None,
             created_at=p.created_at,
             updated_at=p.updated_at,
@@ -528,6 +529,49 @@ async def update_page(
     except IntegrityError:
         await db.rollback()
         raise AppError(409, "conflict", f"You already have a page with the slug '{slug}'") from None
+    return page
+
+
+CONTEXT_LIMIT = 8000
+
+
+def append_context(page: Page, line: str, who: str) -> None:
+    """Add a dated line to the page note. The oldest lines go first if the note grows too long."""
+    one_line = " ".join("".join(ch if ch.isprintable() else " " for ch in line).split())
+    entry = f"- {_now():%Y-%m-%d} {who}: {one_line}"
+    lines = (page.context_note or "").split("\n") if page.context_note else []
+    lines.append(entry)
+    # Make room by dropping the oldest lines an agent wrote. What people wrote is never dropped.
+    while len("\n".join(lines)) > CONTEXT_LIMIT:
+        old = next(
+            (i for i, x in enumerate(lines[:-1]) if "'s agent:" in x and x.startswith("- ")), None
+        )
+        if old is None:
+            return  # no room, so the note keeps what people wrote and the new line is skipped
+        del lines[old]
+    page.context_note = "\n".join(lines)
+    page.context_updated_at = _now()
+
+
+async def set_context(
+    db: AsyncSession, actor, page_id: uuid.UUID, *, text: str, ip: str | None
+) -> Page:
+    """Replace the page context note. Editors and the owner may; anyone with access reads it."""
+    page = await get_for_actor(db, actor, page_id, "page.context", lock=True)
+    page.context_note = text.strip() or None
+    page.context_updated_at = _now()
+    audit.record(
+        db,
+        action="page.context",
+        user_id=actor.user.id,
+        token_id=actor.token.id if actor.token else None,
+        target_type="page",
+        target_id=str(page.id),
+        ip=ip,
+    )
+    await events.emit(db, page.id, "page.updated", {"context": True})
+    await db.commit()
+    await db.refresh(page)
     return page
 
 

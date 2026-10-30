@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 MAX_BODY = 5000
+MAX_BRIEF = 4000
 MAX_ANCHOR_BYTES = 4096
 
 
@@ -21,6 +22,8 @@ class CommentIn(BaseModel):
     parent_id: uuid.UUID | None = None
     version: int | None = Field(default=None, ge=1)
     anchor: dict | None = None
+    # What the asker knows that the page does not say. Only kept when the comment mentions @agent.
+    brief: str | None = Field(default=None, max_length=MAX_BRIEF)
 
     _body = field_validator("body")(_clean_body)
 
@@ -49,6 +52,23 @@ class ClaimIn(BaseModel):
 class CompleteIn(BaseModel):
     result_version: int = Field(ge=1)
     reply: str | None = Field(default=None, max_length=MAX_BODY)
+    # One line worth remembering about this page, added to the page context note.
+    context: str | None = Field(default=None, max_length=1000)
+
+
+class BriefIn(BaseModel):
+    brief: str = Field(max_length=MAX_BRIEF)
+
+    @field_validator("brief")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        return value.strip()
+
+
+class AskIn(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+
+    _question = field_validator("question")(_clean_body)
 
 
 class DismissIn(BaseModel):
@@ -68,7 +88,7 @@ class RequestOut(BaseModel):
     id: uuid.UUID
     page_id: uuid.UUID
     comment_id: uuid.UUID
-    status: Literal["awaiting", "open", "claimed", "done", "dismissed"]
+    status: Literal["awaiting", "open", "claimed", "needs_info", "done", "dismissed"]
     base_version: int | None
     result_version: int | None
     claim_expires_at: datetime | None
@@ -80,6 +100,7 @@ class RequestOut(BaseModel):
     approved_by: str | None = None
     asked: int = 0
     my_offer: str | None = None
+    brief: str | None = None
 
 
 class CommentOut(BaseModel):
@@ -120,6 +141,10 @@ class RequestItemOut(RequestOut):
     page_slug: str
     owner_handle: str
     comment: RequestComment
+    page_context: str | None = None
+    # The whole thread, oldest first, so a question and its answer travel with the request.
+    thread: list[RequestComment] = []
+    thread_truncated: bool = False
 
 
 class RequestListOut(BaseModel):

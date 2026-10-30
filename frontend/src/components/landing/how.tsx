@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { Reveal } from "./motion-bits";
 
 const steps = [
-  { icon: KeyRound, title: "Connect your agent", body: "Create a token with only the scopes it needs. Hand it to Claude Code, Codex, Cursor or any tool that can call an HTTP API." },
+  { icon: KeyRound, title: "Connect your agent", body: "Paste one address into Claude, ChatGPT, Claude Code or Codex and click Allow. No token to copy. Prefer a token? Scoped tokens work too." },
   { icon: FileText, title: "It publishes a page", body: "Reports, dashboards, mockups and small apps get a private address. Scripts and images come along in the bundle." },
   { icon: MessageSquare, title: "Comment, mention, repeat", body: "Leave a note and mention @agent. The request reaches your agent live, and a new version comes back with a reply in the thread." },
 ];
@@ -16,16 +16,19 @@ function Visual({ i }: { i: number }) {
   if (i === 0)
     return (
       <div className="w-full max-w-[380px] rounded-xl border border-border bg-card p-5 shadow-float">
-        <p className="text-[13px] font-semibold text-foreground">New token</p>
-        <div className="mt-3 rounded-md border border-border bg-muted px-3 py-2 font-mono text-[12px] text-foreground">
-          pdk_8f3a<span className="text-subtle">••••••••••••••••</span>
+        <p className="text-[13px] font-semibold text-foreground">Add custom connector</p>
+        <div className="mt-3 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-[12px] text-foreground">
+          https://your-paddock-address/mcp
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <p className="text-[12px] text-muted-foreground">Sign in, then choose what it may do.</p>
+          <span className="rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground">Allow</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {["pages:read", "pages:write", "comments:write"].map((s) => (
             <span key={s} className="rounded-full bg-primary-soft px-2 py-0.5 font-mono text-[11px] text-primary">{s}</span>
           ))}
         </div>
-        <p className="mt-3 text-[12px] text-muted-foreground">Shown once. Revoke any time.</p>
       </div>
     );
   if (i === 1)

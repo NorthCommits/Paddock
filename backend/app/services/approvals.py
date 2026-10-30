@@ -134,6 +134,17 @@ async def offer_to(
     )
 
 
+async def answered(db: AsyncSession, request: RevisionRequest) -> None:
+    """A question was answered: the request opens again for the same approver.
+
+    The yes is dated afresh, so a slow answer does not make the request look stale and hand it to
+    someone else.
+    """
+    request.status = "open"
+    request.approved_at = datetime.now(UTC)
+    await events.emit(db, request.page_id, "request.answered", {"request_id": str(request.id)})
+
+
 async def reset(db: AsyncSession, request: RevisionRequest) -> None:
     """Forget an earlier yes and the people asked, so the request can be routed again."""
     request.approved_by_user_id = None
