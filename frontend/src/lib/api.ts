@@ -111,6 +111,8 @@ export type Page = {
   visibility: string;
   owner_handle: string;
   role: Role;
+  /** The page note: decisions, constraints and terms for anyone working on the page. */
+  context?: string;
   current_version: Version | null;
   created_at: string;
   updated_at: string;
@@ -257,7 +259,7 @@ export function oauthApprove(body: OAuthRequest, decision: "allow" | "deny"): Pr
   return api<{ redirect_to: string }>("/v1/oauth/approve", { method: "POST", body: { ...body, decision } });
 }
 
-export type RequestStatus = "awaiting" | "open" | "claimed" | "done" | "dismissed";
+export type RequestStatus = "awaiting" | "open" | "claimed" | "needs_info" | "done" | "dismissed";
 
 export type CommentAuthor = {
   user_id: string | null;
@@ -281,6 +283,8 @@ export type RequestInfo = {
   asked?: number;
   /** This viewer's part: offered, declined, won or lost. Null when they were not asked. */
   my_offer?: "offered" | "declined" | "won" | "lost" | null;
+  /** What the person who asked knows that the page does not say. */
+  brief?: string | null;
 };
 
 export type CommentItem = {
@@ -344,6 +348,7 @@ export const EVENT_GROUPS: { title: string; types: { id: string; label: string }
       { id: "request.approved", label: "Someone says yes to their agent" },
       { id: "request.claimed", label: "An agent claims a request" },
       { id: "request.reopened", label: "A claim runs out" },
+      { id: "request.needs_info", label: "An agent asks a question" },
       { id: "request.completed", label: "A request is completed" },
       { id: "request.dismissed", label: "A request is dismissed" },
     ],
@@ -359,7 +364,7 @@ export const EVENT_GROUPS: { title: string; types: { id: string; label: string }
 
 export type AppNotification = {
   id: string;
-  kind: "agent_offer" | "agent_approved" | "agent_done" | "chat_message";
+  kind: "agent_offer" | "agent_approved" | "agent_done" | "agent_question" | "chat_message";
   created_at: string;
   read: boolean;
   body: string;

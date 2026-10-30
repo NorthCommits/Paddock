@@ -54,6 +54,7 @@ function statusChip(c: CommentItem) {
   }
   if (r.status === "open") return <Badge>{r.approved_by ? `Approved by ${r.approved_by}` : "Waiting for agent"}</Badge>;
   if (r.status === "claimed") return <Badge variant="success">Agent working</Badge>;
+  if (r.status === "needs_info") return <Badge>Agent asked a question</Badge>;
   if (r.status === "done") return <Badge variant="success">Done in v{r.result_version}</Badge>;
   return <Badge>Rejected</Badge>;
 }
@@ -173,7 +174,7 @@ export function CommentsPanel({
 
   // A new comment or reply shows at once, marked as sent when the server answers. If it fails the
   // text stays in the box so nothing is lost.
-  async function post(body: string, extra: { parent?: string; anchor?: Anchor | null } = {}) {
+  async function post(body: string, extra: { parent?: string; anchor?: Anchor | null; brief?: string } = {}) {
     const me = self.data?.user;
     const asks = /(^|[^A-Za-z0-9_@])@agent(?![A-Za-z0-9_-])/i.test(body);
     const item: Thread = {
@@ -190,7 +191,7 @@ export function CommentsPanel({
       resolved_at: null,
       resolved_by: null,
       anchor: extra.anchor ?? null,
-      request: asks && !extra.parent ? { id: "sending", status: "open", base_version: null, result_version: null, claim_expires_at: null, dismiss_reason: null } : null,
+      request: asks && !extra.parent ? { id: "sending", status: "open", base_version: null, result_version: null, claim_expires_at: null, dismiss_reason: null, brief: extra.brief || null } : null,
       replies: [],
     };
     await change((items) =>
@@ -204,7 +205,7 @@ export function CommentsPanel({
       setError("");
       await api(`/v1/pages/${pageId}/comments`, {
         method: "POST",
-        body: { body, version, ...(extra.parent ? { parent_id: extra.parent } : {}), ...(extra.anchor ? { anchor: extra.anchor } : {}) },
+        body: { body, version, ...(extra.parent ? { parent_id: extra.parent } : {}), ...(extra.anchor ? { anchor: extra.anchor } : {}), ...(asks && extra.brief ? { brief: extra.brief } : {}) },
       });
     } catch (err) {
       setError((err as Error).message);
@@ -292,11 +293,12 @@ export function CommentsPanel({
           label="Comment"
           anchor={draft}
           onClearAnchor={() => onDraft(null)}
-          onSend={async (body) => {
+          withBrief
+          onSend={async (body, brief) => {
             const attached = draft;
             onDraft(null);
             try {
-              await post(body, { anchor: attached });
+              await post(body, { anchor: attached, brief });
             } catch (err) {
               onDraft(attached);
               throw err;
@@ -330,7 +332,7 @@ function ThreadCard({
   number: number | undefined;
   active: boolean;
   run: (work: () => Promise<unknown>) => Promise<void>;
-  post: (body: string, extra?: { parent?: string }) => Promise<void>;
+  post: (body: string, extra?: { parent?: string; brief?: string }) => Promise<void>;
   onResolve: (resolved: boolean) => void;
   onReject: (reason: string) => void;
   onShow: (anchor: Anchor) => void;
@@ -341,7 +343,7 @@ function ThreadCard({
   const ref = useRef<HTMLElement>(null);
   const resolved = !!thread.resolved_at;
   const rejected = !resolved && thread.request?.status === "dismissed";
-  const live = thread.request && thread.request.id !== "sending" && (thread.request.status === "awaiting" || thread.request.status === "open" || thread.request.status === "claimed");
+  const live = thread.request && thread.request.id !== "sending" && ["awaiting", "open", "claimed", "needs_info"].includes(thread.request.status);
   const all = [thread, ...thread.replies];
 
   useEffect(() => {
@@ -363,6 +365,18 @@ function ThreadCard({
       {all.map((c) => (
         <Message key={c.id} c={c} me={me} canModerate={canModerate} run={run} first={c.id === thread.id} />
       ))}
+      {thread.request && thread.request.id !== "sending" && (
+        <Brief
+          request={thread.request}
+          editable={!!me && thread.author.user_id === me && !["done", "dismissed"].includes(thread.request.status)}
+          run={run}
+        />
+      )}
+      {thread.request?.status === "needs_info" && (
+        <p role="status" className="mt-2 rounded-md bg-primary-soft px-2.5 py-2 text-[13px] leading-[19px] text-foreground">
+          The agent is waiting for an answer. Reply in this thread, or add to the context above, and it will carry on.
+        </p>
+      )}
 
       <div className="mt-2 flex flex-wrap items-center gap-1">
         {canComment && !resolved && (
@@ -510,6 +524,7 @@ function Composer({
   compact,
   anchor,
   onClearAnchor,
+  withBrief,
   onSend,
   onCancel,
 }: {
@@ -519,12 +534,16 @@ function Composer({
   compact?: boolean;
   anchor?: Anchor | null;
   onClearAnchor?: () => void;
-  onSend: (body: string) => void | Promise<void>;
+  /** Offer a place to write what the agent should know, once the comment mentions @agent. */
+  withBrief?: boolean;
+  onSend: (body: string, brief?: string) => void | Promise<void>;
   onCancel?: () => void;
 }) {
   const [text, setText] = useState(initial);
+  const [brief, setBrief] = useState("");
   const [busy, setBusy] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
+  const asking = !!withBrief && /(^|[^A-Za-z0-9_@])@agent(?![A-Za-z0-9_-])/i.test(text);
   const mirror = useRef<HTMLDivElement>(null);
   const empty = text.trim().length === 0;
 
@@ -537,12 +556,15 @@ function Composer({
     if (empty || busy) return;
     const body = text.trim();
     // The box empties at once. If sending fails the words come back, so nothing is lost.
+    const note = brief.trim();
     setText("");
+    setBrief("");
     setBusy(true);
     try {
-      await onSend(body);
+      await onSend(body, asking && note ? note : undefined);
     } catch {
       setText((now) => (now ? now : body));
+      setBrief((now) => (now ? now : note));
     } finally {
       setBusy(false);
     }
@@ -603,12 +625,76 @@ function Composer({
           )}
         />
       </div>
+      {asking && (
+        <div className="mt-1.5">
+          <label htmlFor="agent-brief" className="text-[12px] font-medium text-foreground">
+            Context for the agent <span className="font-normal text-muted-foreground">(optional)</span>
+          </label>
+          <textarea
+            id="agent-brief"
+            value={brief}
+            maxLength={4000}
+            rows={3}
+            onChange={(e) => setBrief(e.target.value)}
+            placeholder="What the page does not say: the goal, decisions already made, constraints, where to look. Everyone who can read this comment can read it."
+            className="mt-1 block w-full resize-none rounded-md border border-input-border bg-card px-2.5 py-2 text-[13px] leading-[1.5] text-foreground placeholder:text-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
+          />
+        </div>
+      )}
       <div className="mt-1.5 flex items-center gap-2">
         {hint && <p className="flex-1 text-[12px] text-muted-foreground">{hint}</p>}
         {!hint && <span className="flex-1" />}
         {onCancel && <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>}
         <Button size="sm" onClick={send} disabled={empty || busy}>{label === "Comment" ? "Send" : label === "Reply" ? "Reply" : "Save"}</Button>
       </div>
+    </div>
+  );
+}
+
+// The context the person gave the agent. They can write or change it until the request is finished.
+function Brief({ request, editable, run }: { request: NonNullable<CommentItem["request"]>; editable: boolean; run: (work: () => Promise<unknown>) => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(request.brief ?? "");
+  if (!request.brief && !editable) return null;
+  if (editing) {
+    return (
+      <form
+        className="mt-2 space-y-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setEditing(false);
+          void run(() => api(`/v1/requests/${request.id}/brief`, { method: "PUT", body: { brief: text } }));
+        }}
+      >
+        <textarea
+          autoFocus
+          aria-label="Context for the agent"
+          value={text}
+          maxLength={4000}
+          rows={4}
+          onChange={(e) => setText(e.target.value)}
+          className="block w-full resize-none rounded-md border border-input-border bg-card px-2.5 py-2 text-[13px] leading-[1.5] text-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
+        />
+        <div className="flex justify-end gap-1">
+          <Button type="button" size="sm" variant="ghost" onClick={() => { setText(request.brief ?? ""); setEditing(false); }}>Cancel</Button>
+          <Button type="submit" size="sm">Save context</Button>
+        </div>
+      </form>
+    );
+  }
+  return (
+    <div className="mt-2 rounded-md border border-border bg-muted px-2.5 py-2">
+      <p className="text-[12px] font-medium text-muted-foreground">Context for the agent</p>
+      {request.brief ? (
+        <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-[19px] text-foreground">{request.brief}</p>
+      ) : (
+        <p className="mt-0.5 text-[13px] text-muted-foreground">None yet.</p>
+      )}
+      {editable && (
+        <Button size="sm" variant="ghost" className="mt-1" onClick={() => { setText(request.brief ?? ""); setEditing(true); }}>
+          {request.brief ? "Edit context" : "Add context"}
+        </Button>
+      )}
     </div>
   );
 }
