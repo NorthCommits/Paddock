@@ -98,6 +98,7 @@ Paddock sends its own email through any SMTP server. It does not use Neon or any
   ```
 
   Also add the SPF and DKIM records your provider gives you, or messages will land in spam.
+- **Free hosting note (Render free plan with Brevo):** Render's free plan blocks outbound mail on ports 25, 465 and 587. Brevo also accepts port 2525, so use `SMTP_HOST=smtp-relay.brevo.com`, `SMTP_PORT=2525` and `SMTP_SECURITY=starttls`. The login is the SMTP login shown in Brevo under SMTP & API, and the password is an SMTP key, not an API key. Brevo only sends from a verified sender. Because Render's outbound address changes, turn off "block unauthorized IP addresses" for SMTP keys in Brevo under Security, Authorized IPs. Keep the key in the host's environment settings only, never in the repository.
 - **Rules:** a new account gets a confirmation email. Until it is confirmed the person can sign in and read, but cannot publish pages or create tokens (`403 email_not_verified`). Links work once, confirmation links last 24 hours and reset links 1 hour. A reset signs the person out everywhere. "Forgot password" answers the same whether or not the email has an account. A person can ask for another email once a minute.
 
 ## How agents connect

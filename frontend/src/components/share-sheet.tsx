@@ -1,6 +1,6 @@
 "use client";
 
-import { Globe, Link2, Lock, MailPlus, Trash2, Users } from "lucide-react";
+import { Globe, Link2, Lock, MailPlus, Send, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import useSWR from "swr";
@@ -28,6 +28,10 @@ const VISIBILITY: { id: Visibility; label: string; hint: string; icon: typeof Lo
   { id: "members", label: "People you invite", hint: "Members sign in to open it", icon: Users },
   { id: "link", label: "Anyone with a link", hint: "Share links work, no account needed", icon: Globe },
 ];
+
+const MESSAGE_MAX = 500;
+// Mirrors the server rule: a personal message cannot carry a web address.
+const LINK_IN_TEXT = /https?:|www\.|[a-z0-9-]+\.[a-z]{2,}\//i;
 
 const ROLES: { id: MemberRole; label: string }[] = [
   { id: "viewer", label: "Can view" },
@@ -92,6 +96,7 @@ export function ShareSheet({
   const [notice, setNotice] = useState("");
   const [email, setEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<MemberRole>("viewer");
+  const [message, setMessage] = useState("");
   const [linkRole, setLinkRole] = useState<"viewer" | "commenter">("viewer");
   const [linkDays, setLinkDays] = useState("");
   const [fresh, setFresh] = useState<{ kind: "invite" | "link"; url: string; note: string } | null>(null);
@@ -142,25 +147,35 @@ export function ShareSheet({
     await mutate();
   }
 
+  // Creates the invitation and emails it. Sending again to the same address replaces the old link.
+  const postInvite = async (to: string, role: MemberRole, words: string) => {
+    const r = await api<InviteCreated>(`${base}/invites`, {
+      method: "POST",
+      body: { email: to, role, ...(words ? { message: words } : {}) },
+    });
+    setFresh({
+      kind: "invite",
+      url: r.accept_url,
+      note: r.emailed
+        ? `Invitation emailed to ${r.email}. You can also send them this link yourself.`
+        : `We could not email ${r.email}. Copy the link below and send it to them instead.`,
+    });
+    await refreshAll();
+  };
+
   const sendInvite = (e: React.FormEvent) => {
     e.preventDefault();
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError("Enter a valid email address.");
+    if (LINK_IN_TEXT.test(message)) return setError("A personal message cannot contain links.");
     return run("invite", async () => {
-      const r = await api<InviteCreated>(`${base}/invites`, {
-        method: "POST",
-        body: { email: email.trim(), role: inviteRole },
-      });
+      await postInvite(email.trim(), inviteRole, message.trim());
       setEmail("");
-      setFresh({
-        kind: "invite",
-        url: r.accept_url,
-        note: r.emailed
-          ? `We emailed ${r.email}. You can also send this invitation link yourself.`
-          : `We could not send the email to ${r.email}. Send them this invitation link instead.`,
-      });
-      await refreshAll();
+      setMessage("");
     });
   };
+
+  const sendAgain = (i: Invite) =>
+    run(`again-${i.id}`, () => postInvite(i.email, i.role as MemberRole, ""));
 
   const makeLink = () =>
     run("link", async () => {
@@ -260,6 +275,22 @@ export function ShareSheet({
             <Button type="submit" size="md" disabled={busy === "invite"}>
               <MailPlus aria-hidden="true" /> {busy === "invite" ? "Sending" : "Invite"}
             </Button>
+            <div className="basis-full">
+              <textarea
+                aria-label="Personal message (optional)"
+                value={message}
+                maxLength={MESSAGE_MAX}
+                rows={2}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Add a personal message (optional). It is included in the email."
+                className="block w-full resize-y rounded-md border border-input-border bg-card px-2.5 py-1.5 text-[13px] leading-[1.5] text-foreground placeholder:text-subtle hover:border-subtle focus-visible:border-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-primary/25"
+              />
+              {message.length > 0 && (
+                <p className="tnum mt-1 text-right text-[11px] text-muted-foreground">
+                  {message.length} / {MESSAGE_MAX}
+                </p>
+              )}
+            </div>
           </form>
 
           {fresh?.kind === "invite" && (
@@ -311,6 +342,15 @@ export function ShareSheet({
                       </span>
                     </span>
                     <Badge>{ROLES.find((r) => r.id === i.role)?.label}</Badge>
+                    <button
+                      aria-label={`Send the invitation to ${i.email} again`}
+                      title="Send again with a fresh link"
+                      onClick={() => void sendAgain(i)}
+                      disabled={busy === `again-${i.id}`}
+                      className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                    >
+                      <Send size={15} />
+                    </button>
                     <button
                       aria-label={`Revoke invitation for ${i.email}`}
                       onClick={() => revokeInvite(i)}
