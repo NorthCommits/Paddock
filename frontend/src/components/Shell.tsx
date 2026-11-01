@@ -1,7 +1,8 @@
 "use client";
 
 import * as Menu_ from "@radix-ui/react-dropdown-menu";
-import { ChevronsUpDown, FileText, LogOut, Menu, Monitor, Moon, PlugZap, Search, Settings, Sun } from "lucide-react";
+import * as Tip from "@radix-ui/react-tooltip";
+import { ChevronsUpDown, FileText, PanelLeftClose, PanelLeftOpen, LogOut, Menu, Monitor, Moon, PlugZap, Search, Settings, Sun } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -10,10 +11,11 @@ import type { ReactNode } from "react";
 import useSWR from "swr";
 import { ApiError, fetchMe } from "@/lib/api";
 import { signOutNow } from "@/lib/auth/session";
+import { useSidebarRail } from "@/lib/sidebar";
 import { useModKey } from "@/lib/shortcut";
 import { forgetTheme, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { Wordmark } from "./brand";
+import { Mark, Wordmark } from "./brand";
 import { NotificationBell } from "./notification-bell";
 import { Palette } from "./Palette";
 import { LinkButton } from "./ui/button";
@@ -32,6 +34,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const { data: me, error } = useSWR("me", fetchMe, { shouldRetryOnError: false });
   const [theme, setTheme] = useTheme();
   const mod = useModKey();
+  const [rail, toggleRail] = useSidebarRail();
 
   useEffect(() => {
     if (!(error instanceof ApiError)) return;
@@ -61,21 +64,37 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const initial = (me?.user.display_name || me?.user.handle || "?").slice(0, 1).toUpperCase();
 
-  const sidebar = (
-    <nav aria-label="Main" className="flex h-full flex-col gap-0.5 p-3">
-      <Link href="/pages" className="mb-4 w-fit px-2 pt-1" aria-label="Paddock home">
-        <Wordmark tone="band" />
-      </Link>
+  // The icon rail is only for the desktop sidebar; the phone drawer always shows labels.
+  const sidebarFor = (narrow: boolean) => (
+    <nav aria-label="Main" className={cn("flex h-full flex-col gap-0.5 p-3", narrow && "items-center")}>
+      <div className={cn("mb-4 flex w-full items-center pt-1", narrow ? "flex-col gap-3" : "justify-between pl-2")}>
+        <Link href="/pages" aria-label="Paddock home">
+          {narrow ? <Mark size={24} /> : <Wordmark tone="band" />}
+        </Link>
+        <RailTip label={narrow ? "Expand sidebar" : "Collapse sidebar"} shortcut={`${mod}+B`} show>
+          <button
+            type="button"
+            onClick={toggleRail}
+            aria-label={narrow ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!narrow}
+            className="hidden size-8 items-center justify-center rounded-md text-band-muted transition-colors duration-[var(--dur-fast)] hover:bg-white/10 hover:text-band-foreground focus-visible:ring-2 focus-visible:ring-band-foreground md:flex"
+          >
+            {narrow ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}
+          </button>
+        </RailTip>
+      </div>
       <LayoutGroup id="nav">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = href === "/pages" ? path === href || path.startsWith("/pages/") : path.startsWith(href.split("/").slice(0, 2).join("/"));
           return (
+            <RailTip key={href} label={label} show={narrow}>
             <Link
-              key={href}
               href={href}
+              aria-label={narrow ? label : undefined}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "relative flex h-8 items-center gap-2 rounded-md px-2 text-[13px] transition-colors duration-[120ms]",
+                narrow && "size-9 justify-center px-0",
                 active ? "font-semibold text-band-foreground" : "text-band-muted hover:bg-white/10 hover:text-band-foreground",
               )}
             >
@@ -87,28 +106,33 @@ export function Shell({ children }: { children: ReactNode }) {
                 />
               )}
               <Icon size={16} aria-hidden="true" className={cn("relative", active ? "text-signal" : "text-band-muted")} />
-              <span className="relative">{label}</span>
+              {!narrow && <span className="relative">{label}</span>}
             </Link>
+            </RailTip>
           );
         })}
       </LayoutGroup>
-      <div className="mt-auto">
+      <div className={cn("mt-auto", narrow && "w-full")}>
         {me ? (
           <Menu_.Root>
-            <Menu_.Trigger className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left outline-none transition-colors duration-[120ms] hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-band-foreground data-[state=open]:bg-white/10">
+            <Menu_.Trigger aria-label={narrow ? `Account menu, ${me.user.display_name}` : undefined} className={cn("flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left outline-none transition-colors duration-[120ms] hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-band-foreground data-[state=open]:bg-white/10", narrow && "justify-center px-0")}>
               <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-signal text-[12px] font-bold text-signal-foreground">
                 {initial}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium text-band-foreground">{me.user.display_name}</span>
-                <span className="block truncate text-[12px] text-band-muted">@{me.user.handle}</span>
-              </span>
-              <ChevronsUpDown size={14} aria-hidden="true" className="shrink-0 text-band-muted" />
+              {!narrow && (
+                <>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium text-band-foreground">{me.user.display_name}</span>
+                    <span className="block truncate text-[12px] text-band-muted">@{me.user.handle}</span>
+                  </span>
+                  <ChevronsUpDown size={14} aria-hidden="true" className="shrink-0 text-band-muted" />
+                </>
+              )}
             </Menu_.Trigger>
             <Menu_.Portal>
               <Menu_.Content
-                side="top"
-                align="start"
+                side={narrow ? "right" : "top"}
+                align={narrow ? "end" : "start"}
                 sideOffset={6}
                 className="z-50 w-56 rounded-lg border border-border bg-card p-1 shadow-float data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
               >
@@ -149,9 +173,15 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 
   return (
+    <Tip.Provider delayDuration={200}>
     <div className="flex min-h-dvh bg-muted">
-      <aside className="on-band sticky top-0 hidden h-dvh w-60 shrink-0 bg-band text-band-foreground md:block">
-        {sidebar}
+      <aside
+        className={cn(
+          "on-band sticky top-0 hidden h-dvh shrink-0 overflow-x-hidden bg-band text-band-foreground transition-[width] duration-[var(--dur-base)] ease-[var(--ease-out)] md:block",
+          rail ? "w-16" : "w-60",
+        )}
+      >
+        {sidebarFor(rail)}
       </aside>
       <AnimatePresence>
         {open && (
@@ -170,7 +200,7 @@ export function Shell({ children }: { children: ReactNode }) {
               transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
               onClick={(e) => e.stopPropagation()}
             >
-              {sidebar}
+              {sidebarFor(false)}
             </motion.div>
           </motion.div>
         )}
@@ -210,6 +240,27 @@ export function Shell({ children }: { children: ReactNode }) {
       </div>
       <Palette />
     </div>
+    </Tip.Provider>
+  );
+}
+
+// In the narrow rail a label has no room, so it appears as a tooltip on hover and on keyboard focus.
+function RailTip({ label, shortcut, show, children }: { label: string; shortcut?: string; show: boolean; children: ReactNode }) {
+  if (!show) return <>{children}</>;
+  return (
+    <Tip.Root>
+      <Tip.Trigger asChild>{children}</Tip.Trigger>
+      <Tip.Portal>
+        <Tip.Content
+          side="right"
+          sideOffset={8}
+          className="z-50 flex items-center gap-2 rounded-md bg-foreground px-2.5 py-1.5 text-[12px] font-medium text-background shadow-float"
+        >
+          {label}
+          {shortcut && <kbd className="rounded-sm bg-background/20 px-1 font-mono text-[11px]">{shortcut}</kbd>}
+        </Tip.Content>
+      </Tip.Portal>
+    </Tip.Root>
   );
 }
 
