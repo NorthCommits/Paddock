@@ -79,3 +79,16 @@ async def people(db: AsyncSession, page: Page) -> list[PersonOut]:
         PersonOut(id=u.id, handle=u.handle, display_name=u.display_name, here=u.id in here)
         for u in users
     ]
+
+
+def focus(page: Page, user: User, block: str | None, kind: str) -> None:
+    """Tell the others which part of the page this person is looking at. Live only, never stored.
+
+    The relay carries a name and a block label, nothing from the page. Whoever has the page's live
+    stream open may see it, which is the same set of people who see the presence avatars.
+    """
+    events.push(
+        page.id,
+        "focus.changed",
+        {"user_id": str(user.id), "name": user.display_name, "block": block, "kind": kind},
+    )

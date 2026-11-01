@@ -8,6 +8,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: { default: "Paddock", template: "%s | Paddock" },
   description: "A shared workspace for people and their own AI agents.",
+  appleWebApp: { capable: true, title: "Paddock", statusBarStyle: "default" },
   icons: {
     icon: [
       { url: "/brand/icon.svg", type: "image/svg+xml" },
@@ -18,6 +19,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  viewportFit: "cover",
   colorScheme: "light dark",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f5f3ee" },
