@@ -247,6 +247,28 @@ class BlockReaction(Base):
     )
 
 
+class ChatRead(Base):
+    """How far one person has read one conversation on a page: everything up to `up_to`.
+
+    `conversation` is "all" for the page chat, otherwise the other person's id. One row per person
+    and conversation keeps this small; a message counts as read when its time is at or before
+    `up_to`. `read_at` is when the person read that far.
+    """
+
+    __tablename__ = "chat_reads"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    conversation: Mapped[str] = mapped_column(String(40))
+    up_to: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    read_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (
+        UniqueConstraint("page_id", "user_id", "conversation", name="uq_chat_reads_one"),
+    )
+
+
 class PageInvite(Base):
     """An invitation sent to an email address. Only a hash of the token is stored."""
 

@@ -80,6 +80,25 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
     seen.current = null;
   }, [key]);
 
+  // Tell the senders you have read this far, whenever the chat is open and you are looking at it.
+  const marked = useRef<Record<string, string>>({});
+  const newest = [...items].reverse().find((m) => m.sender.id !== meId && !m.deleted && !m.id.startsWith("pending-"));
+  const newestId = newest?.id;
+  const looking = open && !minimised;
+  useEffect(() => {
+    if (!looking || !newestId) return;
+    function mark() {
+      if (document.visibilityState !== "visible" || !newestId || marked.current[key] === newestId) return;
+      marked.current[key] = newestId;
+      void api(`/v1/pages/${pageId}/chat-read`, { method: "PUT", body: { up_to: newestId, ...(selected ? { with: selected } : {}) } }).catch(() => {
+        delete marked.current[key]; // try again next time
+      });
+    }
+    mark();
+    document.addEventListener("visibilitychange", mark);
+    return () => document.removeEventListener("visibilitychange", mark);
+  }, [looking, newestId, key, pageId, selected]);
+
   async function send() {
     const body = text.trim();
     if (!body || sending) return;
@@ -93,6 +112,8 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
       body,
       created_at: new Date().toISOString(),
       deleted: false,
+      seen_by: [],
+      audience: 0,
     };
     await messages.mutate(
       async (cur) => {
@@ -185,14 +206,18 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
                     >
                       {m.deleted ? "Message deleted" : m.body}
                     </div>
-                    {mineMsg && !m.deleted && !m.id.startsWith("pending-") && (
-                      <button
-                        onClick={() => void remove(m.id)}
-                        aria-label="Delete message"
-                        className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 size={11} aria-hidden="true" /> Delete
-                      </button>
+                    {mineMsg && !m.deleted && (
+                      <Receipt m={m} group={selected === null}>
+                        {!m.id.startsWith("pending-") && (
+                          <button
+                            onClick={() => void remove(m.id)}
+                            aria-label="Delete message"
+                            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 size={11} aria-hidden="true" /> Delete
+                          </button>
+                        )}
+                      </Receipt>
                     )}
                   </div>
                 );
@@ -255,6 +280,65 @@ export function ChatBubble({ chat, pageId, meId }: { chat: Chat; pageId: string;
           </span>
         )}
       </button>
+    </div>
+  );
+}
+
+function Ticks({ double, seen }: { double: boolean; seen: boolean }) {
+  return (
+    <svg viewBox="0 0 20 12" aria-hidden="true" className={cn("h-3 w-[18px] fill-none stroke-current", seen ? "text-primary" : "text-muted-foreground")} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 6.5l3.2 3.2L11 2.5" />
+      {double && <path d="M8.2 8.6l1 1L15.4 2.5" />}
+    </svg>
+  );
+}
+
+// One tick: sent. Two indigo ticks: read. In the page chat they turn indigo only once everyone has
+// read it, and tapping them lists who has. `children` (the Delete button) sits beside the ticks.
+function Receipt({ m, group, children }: { m: ChatMessage; group: boolean; children?: React.ReactNode }) {
+  const [listing, setListing] = useState(false);
+  const n = m.seen_by.length;
+  const all = m.audience > 0 && n >= m.audience;
+  let ticks: React.ReactNode;
+  if (m.id.startsWith("pending-")) {
+    ticks = <span className="text-[11px] text-muted-foreground">Sending</span>;
+  } else if (!group) {
+    ticks = (
+      <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title={n ? `Read ${time(m.seen_by[0].at)}` : "Sent"}>
+        <Ticks double={n > 0} seen={n > 0} />
+        <span className="sr-only">{n ? `Read at ${time(m.seen_by[0].at)}` : "Sent"}</span>
+      </span>
+    );
+  } else {
+    ticks = (
+      <button
+        type="button"
+        onClick={() => n > 0 && setListing((v) => !v)}
+        aria-expanded={n > 0 ? listing : undefined}
+        aria-label={n ? `Read by ${n} of ${m.audience}. Show who.` : "Sent"}
+        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+      >
+        <Ticks double={n > 0} seen={all} />
+        {n > 0 && !all && <span className="tnum" aria-hidden="true">{n}/{m.audience}</span>}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-0.5 flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        {ticks}
+        {children}
+      </div>
+      {group && listing && n > 0 && (
+        <ul className="w-44 space-y-0.5 rounded-md border border-border bg-background p-1.5 text-[11px] text-foreground">
+          {m.seen_by.map((s) => (
+            <li key={s.id} className="flex justify-between gap-2">
+              <span className="truncate">{s.name}</span>
+              <span className="tnum shrink-0 text-muted-foreground">{time(s.at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

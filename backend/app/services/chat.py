@@ -12,8 +12,8 @@ from sqlalchemy import delete as sql_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
-from app.db.models import Notification, Page, PageMessage, User
-from app.schemas.chat import MessageOut, Sender
+from app.db.models import ChatRead, Notification, Page, PageMessage, User
+from app.schemas.chat import MessageOut, SeenBy, Sender
 from app.services import events, notifications, pages, presence
 
 LIMIT = 50
@@ -24,8 +24,15 @@ def _sender(user: User) -> Sender:
     return Sender(id=user.id, handle=user.handle, display_name=user.display_name)
 
 
-def _out(m: PageMessage, people: dict[uuid.UUID, User]) -> MessageOut:
+def _out(
+    m: PageMessage,
+    people: dict[uuid.UUID, User],
+    receipts: dict[uuid.UUID, tuple[list[SeenBy], int]] | None = None,
+) -> MessageOut:
+    seen_by, audience = (receipts or {}).get(m.id, ([], 0))
     return MessageOut(
+        seen_by=seen_by,
+        audience=audience,
         id=m.id,
         sender=_sender(people[m.sender_id]),
         to=m.recipient_id,
@@ -68,7 +75,109 @@ async def list_messages(
     more = len(rows) > LIMIT
     rows = rows[:LIMIT][::-1]
     people = await _people(db, rows)
-    return [_out(m, people) for m in rows], more
+    receipts = await _receipts(db, page, user, with_id, rows)
+    return [_out(m, people, receipts) for m in rows], more
+
+
+def conversation_key(with_id: uuid.UUID | None) -> str:
+    return "all" if with_id is None else str(with_id)
+
+
+async def _receipts(
+    db: AsyncSession, page: Page, user: User, with_id: uuid.UUID | None, rows: list[PageMessage]
+) -> dict[uuid.UUID, tuple[list[SeenBy], int]]:
+    """Who has read each of the caller's own messages. Others' messages get no receipts."""
+    own = [m for m in rows if m.sender_id == user.id and m.deleted_at is None]
+    if not own:
+        return {}
+    # A reader's marker for a conversation is keyed by the OTHER person: for them, "me".
+    key = "all" if with_id is None else str(user.id)
+    readers = [with_id] if with_id is not None else None
+    query = select(ChatRead, User).join(User, User.id == ChatRead.user_id)
+    query = query.where(ChatRead.page_id == page.id, ChatRead.conversation == key)
+    if readers is not None:
+        query = query.where(ChatRead.user_id.in_(readers))
+    else:
+        query = query.where(ChatRead.user_id != user.id)
+    markers = list((await db.execute(query)).all())
+    if with_id is None:
+        access = {u.id for u in await presence.people_with_access(db, page)}
+        access.discard(user.id)
+        markers = [(r, u) for r, u in markers if u.id in access]
+        audience = len(access)
+    else:
+        audience = 1
+    out = {}
+    for m in own:
+        seen = [
+            SeenBy(id=u.id, name=u.display_name or f"@{u.handle}", at=r.read_at)
+            for r, u in markers
+            if r.up_to >= m.created_at
+        ]
+        out[m.id] = (seen, audience)
+    return out
+
+
+async def mark_read(
+    db: AsyncSession,
+    page: Page,
+    user: User,
+    with_id: uuid.UUID | None,
+    up_to_id: uuid.UUID,
+) -> None:
+    """Record that the caller has read a conversation up to a message, and tell its senders."""
+    message = await db.get(PageMessage, up_to_id)
+    if message is None or message.page_id != page.id:
+        raise AppError(404, "not_found", "Message not found")
+    if with_id is None:
+        ours = message.recipient_id is None
+    else:
+        ours = {message.sender_id, message.recipient_id} == {user.id, with_id}
+    if not ours:
+        raise AppError(404, "not_found", "Message not found")
+    key = conversation_key(with_id)
+    row = await db.scalar(
+        select(ChatRead).where(
+            ChatRead.page_id == page.id, ChatRead.user_id == user.id, ChatRead.conversation == key
+        )
+    )
+    if row is None:
+        db.add(
+            ChatRead(
+                page_id=page.id,
+                user_id=user.id,
+                conversation=key,
+                up_to=message.created_at,
+                read_at=datetime.now(UTC),
+            )
+        )
+    elif message.created_at > row.up_to:
+        row.up_to = message.created_at
+        row.read_at = datetime.now(UTC)
+    else:
+        return  # already read this far, so there is nothing new to say
+    await db.flush()
+    senders_query = select(PageMessage.sender_id).where(
+        PageMessage.page_id == page.id,
+        PageMessage.sender_id != user.id,
+        PageMessage.created_at <= message.created_at,
+        PageMessage.deleted_at.is_(None),
+    )
+    if with_id is None:
+        senders_query = senders_query.where(PageMessage.recipient_id.is_(None))
+    else:
+        senders_query = senders_query.where(
+            PageMessage.sender_id == with_id, PageMessage.recipient_id == user.id
+        )
+    senders = list(await db.scalars(senders_query.distinct()))
+    await db.commit()
+    if senders:
+        events.push(
+            page.id,
+            "chat.read",
+            {"reader_id": str(user.id), "scope": "all" if with_id is None else "private"},
+            audience=senders,
+        )
 
 
 async def send(

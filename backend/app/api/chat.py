@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import DbDep, PersonDep, VerifiedPersonDep
 from app.core.ratelimit import limit
-from app.schemas.chat import MessageIn, MessageListOut, MessageOut
+from app.schemas.chat import MessageIn, MessageListOut, MessageOut, ReadIn
 from app.services import chat, pages
 
 router = APIRouter(tags=["chat"])
@@ -33,6 +33,17 @@ async def list_messages(
 async def send_message(page_id: uuid.UUID, body: MessageIn, db: DbDep, actor: VerifiedPersonDep):
     page = await pages.get_for_actor(db, actor, page_id, "chat.write")
     return await chat.send(db, page, actor.user, body.body, body.to)
+
+
+@router.put(
+    "/v1/pages/{page_id}/chat-read",
+    status_code=204,
+    dependencies=[Depends(limit("chatread"))],
+)
+async def mark_read(page_id: uuid.UUID, body: ReadIn, db: DbDep, actor: PersonDep):
+    page = await pages.get_for_actor(db, actor, page_id, "page.view")
+    await chat.mark_read(db, page, actor.user, body.with_id, body.up_to)
+    return Response(status_code=204)
 
 
 @router.delete("/v1/messages/{message_id}", status_code=204)

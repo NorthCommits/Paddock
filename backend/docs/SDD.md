@@ -67,6 +67,8 @@ id, user_id, token_id, action, target_type, target_id, metadata (JSON), ip, crea
 
 **block_reactions** (id, page_id, user_id, block, key, created_at; unique on page, user, block, key; index on page_id; removed with the page)
 
+**chat_reads** (id, page_id, user_id, conversation, up_to, read_at; unique on page, user, conversation). `conversation` is "all" or the other person's id. Everything in it up to `up_to` is read.
+
 **page_presence**
 page_id, user_id, last_seen_at (primary key on page and user). Someone counts as here for 45 seconds after their last heartbeat.
 
@@ -205,6 +207,7 @@ Visibility is a ceiling: `private` is the owner only (members and links stay sto
 |---|---|
 | POST /v1/pages/{id}/presence | Heartbeat: the person has the page open. People only. |
 | DELETE /v1/pages/{id}/presence | The person left the page. |
+| PUT /v1/pages/{id}/chat-read | Body `{up_to, with?}`: the caller has read that conversation up to a message. People only. |
 | POST /v1/pages/{id}/focus | Relays which block the person is on (or null). Live only, people only. |
 | GET /v1/pages/{id}/reactions | Reaction counts per block and key, with `mine` and the first five names. |
 | PUT /v1/pages/{id}/reactions | Add or remove the caller's reaction `{block, key, on}`. Needs the comment role. |
@@ -213,7 +216,7 @@ Visibility is a ceiling: `private` is the owner only (members and links stay sto
 | POST /v1/pages/{id}/messages | Send to everyone, or privately with `to`. Limited to 20 a minute. |
 | DELETE /v1/messages/{id} | The sender, or the page owner for page-wide messages. |
 
-Events `presence.changed`, `focus.changed`, `reaction.changed`, `message.created` and `message.deleted` are live only: not stored, no webhooks, people only.
+Events `presence.changed`, `focus.changed`, `reaction.changed`, `chat.read`, `message.created` and `message.deleted` are live only: not stored, no webhooks, people only.
 
 ### 4.5b Briefs, page note and questions
 | Method and path | Purpose |
