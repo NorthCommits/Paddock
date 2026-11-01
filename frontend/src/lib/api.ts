@@ -402,4 +402,7 @@ export type ChatMessage = {
   body: string;
   created_at: string;
   deleted: boolean;
+  /** Only on your own messages: who has read it, and how many people could. */
+  seen_by: { id: string; name: string; at: string }[];
+  audience: number;
 };

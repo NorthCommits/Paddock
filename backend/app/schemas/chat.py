@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 MAX_LENGTH = 1000
 
@@ -27,6 +27,19 @@ class Sender(BaseModel):
     display_name: str
 
 
+class SeenBy(BaseModel):
+    id: uuid.UUID
+    name: str
+    at: datetime
+
+
+class ReadIn(BaseModel):
+    """Everything up to and including this message has been read."""
+
+    up_to: uuid.UUID
+    with_id: uuid.UUID | None = Field(default=None, alias="with")
+
+
 class MessageOut(BaseModel):
     id: uuid.UUID
     sender: Sender
@@ -34,6 +47,9 @@ class MessageOut(BaseModel):
     body: str
     created_at: datetime
     deleted: bool
+    # Only filled in for your own messages: who has read it, and how many people could.
+    seen_by: list[SeenBy] = []
+    audience: int = 0
 
 
 class MessageListOut(BaseModel):

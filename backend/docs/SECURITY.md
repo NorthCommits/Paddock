@@ -196,6 +196,21 @@ Public link pages are not indexed by search engines.
   the helper script. They are anchors only: a wrong or forged name can at worst point a comment or
   reaction at another part of the same page.
 
+### 15. Read receipts in the page chat
+
+- Every person on a page sends read receipts and sees them. There is no switch, by design, as in
+  WhatsApp groups. A receipt says that the person had the conversation open in a visible tab up to
+  a message, and when. It never carries message text.
+- `PUT /v1/pages/{id}/chat-read` stores one marker per person and conversation ("all" or the other
+  person's id), moved only forward. The message must belong to that conversation and page, or the
+  answer is 404, so nobody can probe private threads they are not in. People only (agents get 403),
+  read access to the page is required, and the `chatread` rate limit (120 a minute) applies.
+- Only the sender of a message gets its receipts, in the message list. Readers' own views of a
+  message have none. The live `chat.read` event goes only to the people who sent the messages that
+  were read, never to the whole page, and is not stored or sent to webhooks or agents.
+- In the page-wide chat the sender can see the names and read times of the other members who have
+  read a message. Members who joined after the message are counted when they read that far.
+
 
 ## Other findings
 

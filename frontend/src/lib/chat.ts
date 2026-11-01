@@ -36,6 +36,11 @@ export function useChat(pageId: string, meId: string) {
         void mutate((k) => Array.isArray(k) && k[0] === "messages" && k[1] === pageId);
         return;
       }
+      if (e.type === "chat.read") {
+        // Someone read what you sent: their read mark moves, so the ticks on your messages change.
+        void refetch(e.data.scope === "all" ? "all" : String(e.data.reader_id));
+        return;
+      }
       if (!e.type.startsWith("message.")) return;
       const sender = String(e.data.sender_id);
       const to = e.data.to ? String(e.data.to) : null;

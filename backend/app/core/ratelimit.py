@@ -24,6 +24,7 @@ RULES = {
     "publish": 30,  # create a page, publish a version, restore a version
     "comment": 60,  # create, edit, delete or resolve comments
     "chat": 20,  # send a chat message
+    "chatread": 120,  # tell the others you read the chat
     "focus": 240,  # tell the page which part you are looking at
     "react": 60,  # add or remove a reaction
     "request": 120,  # claim, complete or dismiss a request
