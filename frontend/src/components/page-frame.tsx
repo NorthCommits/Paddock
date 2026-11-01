@@ -7,10 +7,23 @@ import type { Anchor } from "@/lib/api";
 import { useContentAwake, waitUntilAwake } from "@/lib/content";
 import { cn } from "@/lib/utils";
 
-export type FrameMark = { id: string; n: number; anchor: Anchor };
+export type FrameMark = {
+  id: string;
+  n: number;
+  anchor: Anchor;
+  preview?: { author: string; text: string; replies: number; resolved: boolean };
+};
+export type FramePeer = { block: string; name: string; color: string; kind: "look" | "select" };
+export type FrameReaction = { block: string; key: string; count: number; mine: boolean; who: string[] };
 
 type Slot = { id: number; src: string; version: number; ready: boolean; bridge: boolean; tries: number };
 
+function tagOf(name: string): string {
+  const w = name.trim().split(/\s+/);
+  return ((w[0]?.[0] ?? "?") + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase();
+}
+
+const BLOCK = /^[A-Za-z0-9_-]{1,64}$/;
 const LOAD_PATIENCE = 25 * 1000; // a frame that has not reported in by then is loaded again
 const MAX_TRIES = 4;
 
@@ -26,18 +39,34 @@ export function PageFrame({
   title,
   marks = [],
   focus = null,
+  commentMode = false,
+  shareFocus = false,
+  peers = [],
+  reactions = [],
+  canReact = false,
   onComment,
   onMark,
   onMissing,
+  onFocus,
+  onReact,
+  onExitMode,
 }: {
   url: string | undefined;
   version: number | undefined;
   title: string;
   marks?: FrameMark[];
   focus?: { anchor: Anchor; key: number } | null;
+  commentMode?: boolean;
+  shareFocus?: boolean;
+  peers?: FramePeer[];
+  reactions?: FrameReaction[];
+  canReact?: boolean;
   onComment?: (anchor: Anchor) => void;
   onMark?: (id: string) => void;
   onMissing?: () => void;
+  onFocus?: (block: string | null, kind: "look" | "select") => void;
+  onReact?: (block: string, key: string, on: boolean) => void;
+  onExitMode?: () => void;
 }) {
   const awake = useContentAwake(url);
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -45,12 +74,12 @@ export function PageFrame({
   const frames = useRef(new Map<number, HTMLIFrameElement | null>());
   const counter = useRef(1);
   const latest = useRef({ url, version });
-  const callbacks = useRef({ onComment, onMark, onMissing });
+  const callbacks = useRef({ onComment, onMark, onMissing, onFocus, onReact, onExitMode });
 
   useEffect(() => {
     slotsRef.current = slots;
     latest.current = { url, version };
-    callbacks.current = { onComment, onMark, onMissing };
+    callbacks.current = { onComment, onMark, onMissing, onFocus, onReact, onExitMode };
   });
 
   const addSlot = useCallback((src: string, v: number) => {
@@ -86,7 +115,19 @@ export function PageFrame({
   // Messages from the helper script inside a frame.
   useEffect(() => {
     function onMessage(e: MessageEvent) {
-      const d = e.data as { paddock?: boolean; type?: string; anchor?: Anchor; id?: unknown } | null;
+      const d = e.data as {
+        paddock?: boolean;
+        type?: string;
+        anchor?: Anchor;
+        id?: unknown;
+        kind?: unknown;
+        block?: unknown;
+        key?: unknown;
+        on?: unknown;
+        comment?: unknown;
+        x?: unknown;
+        y?: unknown;
+      } | null;
       if (!d || d.paddock !== true) return;
       const slot = slotsRef.current.find((s) => frames.current.get(s.id)?.contentWindow === e.source);
       if (!slot || e.origin !== new URL(slot.src).origin) return;
@@ -106,6 +147,20 @@ export function PageFrame({
       } else if (d.type === "comment" && d.anchor) callbacks.current.onComment?.(d.anchor);
       else if (d.type === "mark") callbacks.current.onMark?.(String(d.id));
       else if (d.type === "missing") callbacks.current.onMissing?.();
+      else if (d.type === "focus") {
+        const id = typeof d.id === "string" && BLOCK.test(d.id) ? d.id : null;
+        callbacks.current.onFocus?.(id, d.kind === "select" ? "select" : "look");
+      } else if (d.type === "react") {
+        // A reaction is an action as the viewer, so it needs a real click or tap just now.
+        const active = typeof navigator !== "undefined" && navigator.userActivation ? navigator.userActivation.isActive : true;
+        if (active && typeof d.block === "string" && BLOCK.test(d.block) && typeof d.key === "string") {
+          callbacks.current.onReact?.(d.block, d.key, d.on === true);
+        }
+      } else if (d.type === "mode" && d.comment === false) callbacks.current.onExitMode?.();
+      else if (d.type === "markhover" && typeof d.id === "string" && typeof d.x === "number" && typeof d.y === "number") {
+        const box = frames.current.get(slot.id)?.getBoundingClientRect();
+        if (box) setHover({ id: d.id, x: box.left + d.x, y: box.top + d.y });
+      } else if (d.type === "markleave") setHover(null);
       else if ((d.type === "reload" || d.type === "patch-failed") && top && top.id === slot.id) void reloadLatest();
     }
     window.addEventListener("message", onMessage);
@@ -131,12 +186,35 @@ export function PageFrame({
   // Numbered markers for open comments, and scrolling to a comment's spot.
   const readySlot = [...slots].reverse().find((s) => s.ready && s.bridge);
   const readyId = readySlot?.id;
+  const post = useCallback(
+    (msg: Record<string, unknown>) => {
+      if (readyId === undefined) return;
+      const target = slotsRef.current.find((s) => s.id === readyId);
+      if (target) frames.current.get(readyId)?.contentWindow?.postMessage({ paddock: true, ...msg }, new URL(target.src).origin);
+    },
+    [readyId],
+  );
   useEffect(() => {
     if (readyId === undefined) return;
-    const list = marks.map((m) => ({ id: m.id, n: m.n, anchor: m.anchor }));
-    const target = slotsRef.current.find((s) => s.id === readyId);
-    if (target) frames.current.get(readyId)?.contentWindow?.postMessage({ paddock: true, type: "marks", marks: list }, new URL(target.src).origin);
-  }, [marks, readyId]);
+    // Comment words stay in the app: the page only gets where to draw each number.
+    post({ type: "marks", marks: marks.map((m) => ({ id: m.id, n: m.n, anchor: m.anchor })) });
+  }, [marks, readyId, post]);
+
+  // The helper script learns the viewer's state whenever it changes, and again after each new frame.
+  useEffect(() => {
+    if (readyId !== undefined) post({ type: "mode", comment: commentMode });
+  }, [commentMode, readyId, post]);
+  useEffect(() => {
+    if (readyId !== undefined) post({ type: "share", on: shareFocus });
+  }, [shareFocus, readyId, post]);
+  useEffect(() => {
+    if (readyId !== undefined) post({ type: "peers", peers: peers.map((p) => ({ block: p.block, color: p.color, kind: p.kind, tag: tagOf(p.name) })) });
+  }, [peers, readyId, post]);
+  useEffect(() => {
+    if (readyId !== undefined) {
+      post({ type: "reactions", items: reactions.map((r) => ({ block: r.block, key: r.key, count: r.count, mine: r.mine })), can: canReact });
+    }
+  }, [reactions, canReact, readyId, post]);
 
   const shownFocus = useRef(0);
   useEffect(() => {
@@ -147,9 +225,35 @@ export function PageFrame({
   }, [focus, readyId]);
 
   const showing = slots.some((s) => s.ready);
+  const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
+  const hovered = hover ? marks.find((m) => m.id === hover.id)?.preview : undefined;
+
+  // Escape leaves comment mode even when the keyboard focus is outside the page frame.
+  useEffect(() => {
+    if (!commentMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") callbacks.current.onExitMode?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [commentMode]);
 
   return (
     <>
+      {hover && hovered && (
+        <div
+          role="tooltip"
+          style={{ position: "fixed", left: Math.max(8, Math.min(hover.x - 200, window.innerWidth - 256)), top: hover.y + 6 }}
+          className="pointer-events-none z-30 w-60 rounded-xl border border-border bg-card p-3 text-[13px] text-foreground shadow-float"
+        >
+          <b className="block text-[12px]">{hovered.author}</b>
+          <p className="mt-1 line-clamp-3 break-words">{hovered.text}</p>
+          <small className="mt-1.5 block text-[11px] text-muted-foreground">
+            {hovered.resolved ? "Resolved. " : ""}
+            {hovered.replies === 1 ? "1 reply" : `${hovered.replies} replies`}
+          </small>
+        </div>
+      )}
       {!showing && (
         <div className="space-y-3 p-6">
           <Skeleton className="h-[40vh] w-full" />

@@ -2,14 +2,17 @@
   Paddock page helper. The content server adds this to every HTML page it serves.
 
   It does nothing unless the page is shown inside the Paddock app, and it only listens to messages
-  from the app's own origin (set in data-app-origin on its script tag). It does three things:
+  from the app's own origin (set in data-app-origin on its script tag). It does these things:
 
     1. Update: when the app sends a new version's address, fetch it and change only the parts that
        differ, so the page does not reload. If that is not safe, it asks the app to reload instead.
     2. Comment: show a small button beside the part of the page under the pointer, and a Comment
        button beside any selected text. Either one sends an "anchor" to the app.
     3. Show: scroll to and flash the part of the page an anchor points at, and draw numbered
-       markers where open comments are.
+       markers where open comments are. A marker shows a small preview card when hovered.
+    4. Live page: name each part (data-pd-id, or a name made from its words) so comments, reactions
+       and other people's places keep pointing at the right part. In comment mode a click on a part
+       comments on it. Others' places and reactions are drawn here; the app sends them in.
 */
 (function () {
   "use strict";
@@ -21,6 +24,17 @@
   var calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var VISUAL = /^(img|svg|canvas|video|picture|figure|iframe)$/;
   var INDIGO = "59, 51, 201";
+  var ID_OK = /^[A-Za-z0-9_-]{1,64}$/;
+  var COLOR_OK = /^#[0-9a-fA-F]{6}$/;
+  // Small line icons, drawn here so no emoji or picture files are needed.
+  var ICON = {
+    like: '<svg viewBox="0 0 24 24"><path d="M7 11v9H4v-9zM7 11l4-8c1.6 0 2.5 1.2 2.2 2.8L12.7 9H19a2 2 0 0 1 2 2.3l-1 6.5A2 2 0 0 1 18 19.5H7"/></svg>',
+    love: '<svg viewBox="0 0 24 24"><path d="M12 20s-8-4.6-8-10.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.5C20 15.4 12 20 12 20z"/></svg>',
+    cheer: '<svg viewBox="0 0 24 24"><path d="M12 3l2.2 5.6L20 9.3l-4.4 3.9 1.4 5.8L12 15.8 7 19l1.4-5.8L4 9.3l5.8-.7z"/></svg>',
+    eyes: '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></svg>',
+  };
+  var LABEL = { like: "Like", love: "Love", cheer: "Cheer", eyes: "Looking" };
+  var KEYS = ["like", "love", "cheer", "eyes"];
 
   function send(msg) {
     msg.paddock = true;
@@ -48,15 +62,40 @@
     ".mark{display:block;min-width:22px;height:22px;border-radius:11px;padding:0 6px;font-size:12px;" +
     "background:#ff6b4a;color:#0f1115;box-shadow:0 1px 4px rgba(15,17,40,.4)}" +
     ".mark:hover{background:#ff8265}" +
+    ".hl.pin{outline:2px solid rgba(" + INDIGO + ",.85);background:rgba(" + INDIGO + ",.1)}" +
+    ".peer{position:absolute;pointer-events:none;border-radius:4px;transition:opacity 180ms ease}" +
+    ".tag{position:absolute;top:-20px;left:-2px;padding:2px 7px;border-radius:4px 4px 4px 0;font:600 11px/16px system-ui,sans-serif;" +
+    "color:#fff;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis}" +
+    ".chips{position:absolute;display:flex;gap:4px;transform:translateX(-100%)}" +
+    ".chip,.pick button{position:static;display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:11px;" +
+    "font:600 12px/1 system-ui,sans-serif;color:#1f2230;background:#fff;box-shadow:0 0 0 1px rgba(15,17,40,.18),0 1px 3px rgba(15,17,40,.2)}" +
+    ".chip:hover,.pick button:hover{background:#eef0ff}" +
+    ".chip.mine{background:#e6e8ff;box-shadow:0 0 0 1.5px rgb(" + INDIGO + ")}" +
+    ".chip svg,.pick svg,.react svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}" +
+    ".react{width:28px;height:28px;border-radius:50%;padding:0;color:#fff}" +
+    ".react svg{margin:7px}" +
+    ".pick{position:absolute;display:none;gap:2px;padding:4px;border-radius:16px;background:#fff;box-shadow:0 0 0 1px rgba(15,17,40,.15),0 6px 18px rgba(15,17,40,.25)}" +
+    ".pick button{height:28px;width:28px;padding:0;justify-content:center;border-radius:14px;box-shadow:none}" +
+    "@media (pointer:coarse){.mark{min-width:44px;height:44px;border-radius:22px}.add,.react{width:44px;height:44px}" +
+    ".chip{height:44px;min-width:44px;justify-content:center}.pick button{height:44px;width:44px}.sel{height:44px}}" +
+    "@media (prefers-reduced-motion:reduce){.peer{transition:none}}" +
     "</style>" +
     '<div class="hl"></div>' +
+    '<div class="peers"></div>' +
     '<button class="add" type="button" aria-label="Comment on this part" title="Comment on this part">+</button>' +
+    '<button class="react" type="button" aria-label="React to this part" title="React to this part">' + ICON.like + "</button>" +
+    '<div class="pick"></div>' +
     '<button class="sel" type="button">Comment</button>' +
-    '<div class="marks"></div>';
+    '<div class="marks"></div>' +
+    '<div class="chipbox"></div>';
   var hl = ui.querySelector(".hl");
   var addBtn = ui.querySelector(".add");
+  var reactBtn = ui.querySelector(".react");
+  var pickBox = ui.querySelector(".pick");
   var selBtn = ui.querySelector(".sel");
   var markBox = ui.querySelector(".marks");
+  var peerBox = ui.querySelector(".peers");
+  var chipBox = ui.querySelector(".chipbox");
   document.documentElement.appendChild(host);
 
   // ------------------------------------------------------------------ finding parts
@@ -113,10 +152,77 @@
     return found ? norm(found.textContent).slice(0, 100) : null;
   }
 
+  // Stable block ids. A part with data-pd-id keeps that name for ever. Any other part is named from its
+  // tag and first words, so the same part gets the same name for everyone who views the same version.
+  var idByEl = new Map();
+  var elById = new Map();
+  var idsDirty = true;
+  var builtAt = 0;
+
+  function isBlock(el) {
+    if (el === host || host.contains(el)) return false;
+    var d = getComputedStyle(el).display;
+    if (d.indexOf("inline") === 0 || d === "contents" || d === "none") return false;
+    return anchorable(el);
+  }
+
+  function hashOf(s) {
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+
+  function buildIds() {
+    idsDirty = false;
+    builtAt = Date.now();
+    idByEl = new Map();
+    elById = new Map();
+    var seen = {};
+    var all = document.body ? document.body.querySelectorAll("*") : [];
+    for (var i = 0; i < all.length && i < 3000; i++) {
+      var el = all[i];
+      var given = el.getAttribute("data-pd-id");
+      var id = null;
+      if (given && ID_OK.test(given) && !elById.has(given)) {
+        id = given;
+      } else if (isBlock(el)) {
+        var tag = el.tagName.toLowerCase();
+        var base = "b-" + hashOf(tag + "|" + (tag === "img" ? el.getAttribute("alt") || "" : norm(el.textContent).slice(0, 120)));
+        seen[base] = (seen[base] || 0) + 1;
+        id = seen[base] > 1 ? base + "-" + seen[base] : base;
+        if (elById.has(id)) id = null;
+      }
+      if (id) {
+        idByEl.set(el, id);
+        elById.set(id, el);
+      }
+    }
+  }
+
+  function ids() {
+    // A busy page (animation, a clock) must not make every pointer move rebuild the names.
+    if (idsDirty && Date.now() - builtAt > 400) buildIds();
+    return idByEl;
+  }
+  function idOf(el) {
+    return ids().get(el) || null;
+  }
+  function byId(id) {
+    ids();
+    return elById.get(id) || null;
+  }
+  if (window.MutationObserver) {
+    new MutationObserver(function () {
+      idsDirty = true;
+    }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["data-pd-id"] });
+  }
+
   function anchorFor(el, selected) {
     var tag = el.tagName.toLowerCase();
     var text = tag === "img" ? el.getAttribute("alt") || "Image" : norm(el.textContent);
     var a = { v: 1, kind: selected ? "text" : "block", tag: tag, quote: text.slice(0, 200), selector: pathTo(el).slice(0, 240) };
+    var id = idOf(el);
+    if (id) a.id = id;
     if (selected) a.selected = norm(selected).slice(0, 240);
     var section = sectionOf(el);
     if (section) a.section = section;
@@ -133,6 +239,14 @@
       return norm(el.textContent).toLowerCase().indexOf(want) !== -1;
     }
     var el = null;
+    // A name with a count on the end ("b-x-2") depends on what else is on screen, so the path goes first.
+    if (a.id && ID_OK.test(a.id) && !/^b-[0-9a-z]+-\d+$/.test(a.id)) {
+      el = byId(a.id);
+      // A named part is trusted even if its words changed. A computed name only matches the same words.
+      if (el && (!a.tag || el.tagName.toLowerCase() === a.tag)) {
+        if (el.hasAttribute("data-pd-id") || fits(el)) return el;
+      }
+    }
     try {
       el = a.selector ? document.querySelector(a.selector) : null;
     } catch (e) {
@@ -171,6 +285,39 @@
     }
   }
 
+  // ------------------------------------------------------------------ shared state
+
+  var mode = false; // comment mode: a tap or click on a part comments on it
+  var sharing = false; // the reader lets others see which part they look at
+  var canReact = false;
+  var reacts = [];
+  var peers = [];
+  var peersSig = "";
+  var reactSig = "";
+  var focusTimer = 0;
+  var focusWant = null;
+  var focusSent = { id: null, kind: "look" };
+
+  // Tells the app which part the reader is on (never the words), at most four times a second.
+  function report(id, kind) {
+    if (!sharing) return;
+    focusWant = { id: id, kind: kind };
+    if (focusTimer) return;
+    focusTimer = setTimeout(function () {
+      focusTimer = 0;
+      var w = focusWant;
+      if (!w || (w.id === focusSent.id && w.kind === focusSent.kind)) return;
+      focusSent = w;
+      send({ type: "focus", id: w.id, kind: w.kind });
+    }, 250);
+  }
+
+  function mineFor(id, key) {
+    return reacts.some(function (r) {
+      return r.block === id && r.key === key && r.mine;
+    });
+  }
+
   // ------------------------------------------------------------------ hover button
 
   var current = null;
@@ -189,15 +336,27 @@
     var x = b.l - 36;
     if (x < pageXOffset + 4) x = b.l + b.w + 8;
     if (x > pageXOffset + document.documentElement.clientWidth - 34) x = b.l + b.w - 32;
+    var top = Math.max(b.t - 2, 4);
+    hl.className = mode ? "hl pin" : "hl";
     addBtn.style.left = Math.max(x, 4) + "px";
-    addBtn.style.top = Math.max(b.t - 2, 4) + "px";
-    addBtn.style.display = "block";
+    addBtn.style.top = top + "px";
+    addBtn.style.display = mode ? "none" : "block";
+    var id = idOf(el);
+    if (canReact && id && !mode) {
+      reactBtn.style.left = Math.max(x, 4) + "px";
+      reactBtn.style.top = top + 32 + "px";
+      reactBtn.style.display = "block";
+    } else {
+      reactBtn.style.display = "none";
+    }
   }
 
   function hideHover() {
     current = null;
     hl.style.display = "none";
     addBtn.style.display = "none";
+    reactBtn.style.display = "none";
+    report(null, "look");
   }
 
   function onMove() {
@@ -211,6 +370,7 @@
     if (el) {
       current = el;
       showFor(el);
+      report(idOf(el), "look");
     } else {
       hideTimer = setTimeout(hideHover, 450);
     }
@@ -249,6 +409,7 @@
     var text = sel ? norm(sel.toString()) : "";
     if (!sel || sel.isCollapsed || text.length < 2) {
       selBtn.style.display = "none";
+      if (picked) report(current ? idOf(current) : null, "look");
       picked = null;
       return;
     }
@@ -264,6 +425,7 @@
     if (!last) return;
     picked = { el: el, text: text };
     hideHover();
+    report(idOf(el), "select");
     selBtn.style.left = Math.max(4, last.right + pageXOffset - 40) + "px";
     selBtn.style.top = last.bottom + pageYOffset + 8 + "px";
     selBtn.style.display = "block";
@@ -283,9 +445,68 @@
     selBtn.style.display = "none";
   });
 
+  // ------------------------------------------------------------------ comment mode
+
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (!mode || e.target === host) return;
+      var el = blockOf(e.target);
+      e.preventDefault();
+      e.stopPropagation();
+      if (!el) return;
+      flash(el, true);
+      send({ type: "comment", anchor: anchorFor(el, "") });
+    },
+    true
+  );
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && mode) send({ type: "mode", comment: false });
+  });
+
+  // ------------------------------------------------------------------ reactions
+
+  var pickFor = null;
+
+  function closePick() {
+    pickFor = null;
+    pickBox.style.display = "none";
+  }
+
+  function toggle(id, key) {
+    if (!canReact || !ID_OK.test(id)) return;
+    send({ type: "react", block: id, key: key, on: !mineFor(id, key) });
+  }
+
+  KEYS.forEach(function (key) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = ICON[key];
+    b.setAttribute("aria-label", LABEL[key]);
+    b.title = LABEL[key];
+    b.addEventListener("click", function () {
+      if (pickFor) toggle(pickFor, key);
+      closePick();
+    });
+    pickBox.appendChild(b);
+  });
+
+  reactBtn.addEventListener("click", function () {
+    var id = current && idOf(current);
+    if (!id) return;
+    pickFor = id;
+    pickBox.style.left = reactBtn.style.left;
+    pickBox.style.top = parseFloat(reactBtn.style.top) + 32 + "px";
+    pickBox.style.display = "flex";
+  });
+  document.addEventListener("pointerdown", function (e) {
+    if (pickFor && e.target !== host) closePick();
+  });
+
   // ------------------------------------------------------------------ show and markers
 
   var marks = [];
+  var marksSig = "";
   var drawQueued = false;
 
   function drawMarks() {
@@ -311,7 +532,75 @@
         flash(el, true);
         send({ type: "mark", id: m.id });
       });
+      // The preview card is drawn by the app, so the comment's words never enter this frame.
+      function over() {
+        var r = btn.getBoundingClientRect();
+        send({ type: "markhover", id: m.id, x: r.right, y: r.bottom });
+      }
+      function out() {
+        send({ type: "markleave" });
+      }
+      btn.addEventListener("mouseenter", over);
+      btn.addEventListener("focus", over);
+      btn.addEventListener("mouseleave", out);
+      btn.addEventListener("blur", out);
       markBox.appendChild(btn);
+    });
+    drawPeers();
+    drawChips();
+  }
+
+  // Others' places: a soft outline in their colour and a name tag, on the part they are looking at.
+  function drawPeers() {
+    peerBox.textContent = "";
+    peers.forEach(function (p) {
+      var el = byId(p.block);
+      if (!el) return;
+      var b = box(el);
+      var d = document.createElement("div");
+      d.className = "peer";
+      var col = p.color;
+      var solid = p.kind === "select";
+      d.style.cssText =
+        "left:" + (b.l - 4) + "px;top:" + (b.t - 3) + "px;width:" + (b.w + 8) + "px;height:" + (b.h + 6) + "px;" +
+        "outline:2px " + (solid ? "solid " : "dashed ") + col + ";background:" + col + (solid ? "1f" : "14");
+      var t = document.createElement("div");
+      t.className = "tag";
+      t.style.background = col;
+      t.textContent = p.tag;
+      d.appendChild(t);
+      peerBox.appendChild(d);
+    });
+  }
+
+  function drawChips() {
+    chipBox.textContent = "";
+    var groups = {};
+    reacts.forEach(function (r) {
+      (groups[r.block] = groups[r.block] || []).push(r);
+    });
+    Object.keys(groups).forEach(function (id) {
+      var el = byId(id);
+      if (!el) return;
+      var b = box(el);
+      var row = document.createElement("div");
+      row.className = "chips";
+      row.style.left = Math.min(b.l + b.w, pageXOffset + document.documentElement.clientWidth - 4) + "px";
+      row.style.top = b.t + b.h - 11 + "px";
+      groups[id].forEach(function (r) {
+        var c = document.createElement("button");
+        c.type = "button";
+        c.className = r.mine ? "chip mine" : "chip";
+        c.innerHTML = ICON[r.key] + "<span></span>";
+        c.querySelector("span").textContent = String(r.count);
+        c.setAttribute("aria-label", LABEL[r.key] + ", " + r.count + (r.mine ? ", yours" : ""));
+        c.setAttribute("aria-pressed", r.mine ? "true" : "false");
+        c.addEventListener("click", function () {
+          toggle(id, r.key);
+        });
+        row.appendChild(c);
+      });
+      chipBox.appendChild(row);
     });
   }
   function queueMarks() {
@@ -512,6 +801,7 @@
         copyAttributes(document.body, after.body);
         morph(document.body, after.body);
         hideHover();
+        builtAt = 0;
         queueMarks();
         send({ type: "patched", changed: changed });
       })
@@ -536,9 +826,53 @@
     if (!m || m.paddock !== true) return;
     if (m.type === "patch" && typeof m.url === "string") patch(m.url);
     else if (m.type === "marks" && Array.isArray(m.marks)) {
+      var sig = JSON.stringify(m.marks);
+      if (sig === marksSig) return;
+      marksSig = sig;
       marks = m.marks;
       queueMarks();
     } else if (m.type === "show") show(m.anchor);
+    else if (m.type === "mode") {
+      mode = m.comment === true;
+      hideHover();
+    } else if (m.type === "share") {
+      sharing = m.on === true;
+      if (!sharing) {
+        focusWant = null;
+        focusSent = { id: null, kind: "look" };
+      }
+    } else if (m.type === "peers" && Array.isArray(m.peers)) {
+      if (JSON.stringify(m.peers) === peersSig) return;
+      peersSig = JSON.stringify(m.peers);
+      peers = m.peers
+        .filter(function (p) {
+          return p && ID_OK.test(String(p.block)) && COLOR_OK.test(String(p.color)) && typeof p.tag === "string";
+        })
+        .slice(0, 12)
+        .map(function (p) {
+          return { block: p.block, color: p.color, tag: p.tag.slice(0, 3), kind: p.kind === "select" ? "select" : "look" };
+        });
+      queueMarks();
+    } else if (m.type === "reactions" && Array.isArray(m.items)) {
+      if (JSON.stringify([m.items, m.can]) === reactSig) return;
+      reactSig = JSON.stringify([m.items, m.can]);
+      canReact = m.can === true;
+      reacts = m.items
+        .filter(function (r) {
+          return r && ID_OK.test(String(r.block)) && KEYS.indexOf(r.key) !== -1 && Number(r.count) > 0;
+        })
+        .slice(0, 400)
+        .map(function (r) {
+          return {
+            block: r.block,
+            key: r.key,
+            count: Number(r.count),
+            mine: r.mine === true,
+          };
+        });
+      if (current) showFor(current); // the react button may now be allowed, or not
+      queueMarks();
+    }
   });
 
   send({ type: "ready" });

@@ -15,6 +15,7 @@ from app.api import (
     comments,
     events,
     health,
+    live,
     notifications,
     pages,
     presence,
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(comments.router)
     app.include_router(events.router)
     app.include_router(presence.router)
+    app.include_router(live.router)
     app.include_router(chat.router)
     app.include_router(webhooks.router)
     app.include_router(notifications.router)

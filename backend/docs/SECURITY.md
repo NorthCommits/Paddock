@@ -167,6 +167,35 @@ Public link pages are not indexed by search engines.
   inviter's email address to the person they chose to invite.
 - "Send again" creates a new invitation for the same address. The old link stops working, because
   only a hash of each link is stored and the old one cannot be sent again.
+### 14. Who is where and reactions
+
+- **Places are live only.** `POST /v1/pages/{id}/focus` relays the part of the page a person is on
+  (a block name such as `b-1ydfq6i`, never page words) to the other people on the page. It is not
+  stored, not sent to webhooks and not sent to agents. It needs a signed in, verified person with
+  read access, and the `focus` rate limit (240 a minute) applies. Block names are limited to
+  letters, digits, `_` and `-`, 64 characters, so they cannot carry markup.
+- **Opt out.** Each person can hide their place. The choice is kept in their browser, nothing is
+  sent while it is off, and nothing is sent unless another person is on the page.
+- **What the page frame receives.** A published page's own script shares a window with the helper
+  and can read any message the app posts into the frame. So the app sends the frame only what it
+  needs to draw: block names, colours, two letter initials, reaction counts and marker numbers.
+  Comment text, authors and full names stay in the app: the marker preview card is drawn by the
+  app when the helper reports a hover. The helper draws names as text, checks colours against
+  `#rrggbb`, accepts only four reaction keys and caps list sizes.
+- **Forged messages.** For the same reason a page's script can post messages to the app that look
+  like the helper's. The app treats them as untrusted: block names are validated, and a reaction
+  is only accepted while the browser reports a recent real click or tap. The worst a forged
+  message can do is open the comment box, switch comment mode off, or move the sender's own
+  outline. Comments themselves still need the person to press Send.
+- **Reactions** (`like`, `love`, `cheer`, `eyes`) need the comment role or higher and a person (not
+  an agent). One person has at most 200 reactions on a page, the `react` limit (60 a minute)
+  applies, and they are deleted with the page. Anyone who can read the page can see counts and the
+  first five names (in the app, not in the page frame). Adding the same reaction twice at once is
+  harmless.
+- **Block names** come from `data-pd-id` or from a hash of a part's tag and first words, computed in
+  the helper script. They are anchors only: a wrong or forged name can at worst point a comment or
+  reaction at another part of the same page.
+
 
 ## Other findings
 

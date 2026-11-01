@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bot, BookOpen, ExternalLink, History, MessageSquare, LogOut, Pencil, RotateCcw, Share2, Trash2, Upload, User, X } from "lucide-react";
+import { ArrowLeft, Bot, BookOpen, ExternalLink, Eye, EyeOff, History, MessageSquare, MessageSquarePlus, LogOut, Pencil, RotateCcw, Share2, Trash2, Upload, User, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -19,10 +19,11 @@ import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, ROLE_LABEL, api, fetchMe } from "@/lib/api";
-import type { Anchor, Page, Publish, Version, VersionList, ViewUrl } from "@/lib/api";
+import type { Anchor, Page, Person, Publish, Version, VersionList, ViewUrl } from "@/lib/api";
 import { ago, bytes } from "@/lib/format";
 import { useChat } from "@/lib/chat";
 import { useLive } from "@/lib/live";
+import { usePeers, useReactions, useShareFocus, useTabAlert } from "@/lib/page-live";
 import { usePresence } from "@/lib/presence";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +51,11 @@ export default function PageViewer() {
   const [rollback, setRollback] = useState<Version | null>(null);
   const [notice, setNotice] = useState("");
   const [failed, setFailed] = useState("");
+  const [commentMode, setCommentMode] = useState(false);
+  const [shareFocus, setShareFocus] = useShareFocus();
+  const alertTab = useTabAlert();
+  const people = useSWR(["people", id], () => api<{ items: Person[] }>(`/v1/pages/${id}/people`), { refreshInterval: 30_000, shouldRetryOnError: false });
+  const othersHere = (people.data?.items ?? []).some((x) => x.here && x.id !== meId);
 
   const current = page.data?.current_version?.number ?? null;
   const shown = picked ?? current;
@@ -68,13 +74,39 @@ export default function PageViewer() {
   const threads = useThreads(id);
   const marks = useMemo(() => {
     const numbers = markNumbers(threads.data?.items);
-    return (threads.data?.items ?? []).flatMap((t) => (t.anchor && numbers.has(t.id) ? [{ id: t.id, n: numbers.get(t.id)!, anchor: t.anchor }] : []));
+    return (threads.data?.items ?? []).flatMap((t) =>
+      t.anchor && numbers.has(t.id)
+        ? [
+            {
+              id: t.id,
+              n: numbers.get(t.id)!,
+              anchor: t.anchor,
+              preview: {
+                author: t.author.by_agent ? (t.author.agent_label ?? "Agent") : (t.author.display_name ?? t.author.handle ?? "Someone"),
+                text: t.body,
+                replies: t.replies.filter((r) => !r.deleted).length,
+                resolved: !!t.resolved_at,
+              },
+            },
+          ]
+        : [],
+    );
   }, [threads.data]);
+  // An agent is working while any request on this page is claimed.
+  const agentWorking = (threads.data?.items ?? []).some((t) => t.request?.status === "claimed");
 
   // Changes made by other people or by an agent arrive here at once, so the screen stays current.
   const { mutate: refetch } = useSWRConfig();
+  const canReact = !!page.data && ["owner", "editor", "commenter"].includes(page.data.role);
+  const reactions = useReactions(id, canReact);
+  const peers = usePeers(id, meId, shareFocus, othersHere);
   useLive(`/v1/pages/${id}/events`, (e) => {
     chat.onEvent(e);
+    if (e !== "resync") {
+      peers.onEvent(e);
+      reactions.onEvent(e);
+      if (e.type === "version.published" || e.type.startsWith("comment.") || e.type.startsWith("request.")) alertTab();
+    }
     const comments = () => refetch((k) => Array.isArray(k) && k[0] === "comments" && k[1] === id);
     const people = () => refetch((k) => Array.isArray(k) && k[0] === "people" && k[1] === id);
     if (e === "resync") {
@@ -154,14 +186,24 @@ export default function PageViewer() {
   const shownVersion = versions.data?.items.find((v) => v.number === shown);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-2.5">
-        <Link href="/pages" aria-label="Back to pages" className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
+    <div className="page-in flex h-full min-h-0 flex-col">
+      <div
+        className={cn(
+          "hdr-touch safe-top relative z-20 mx-2 mt-2 flex flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-background/90 px-3 py-2 shadow-card backdrop-blur sm:mx-3 sm:gap-2",
+          agentWorking && "edge-glow",
+        )}
+      >
+        <Link href="/pages" aria-label="Back to pages" className="touch-44 t-fast flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted">
           <ArrowLeft size={16} />
         </Link>
         {p ? <Title page={p} canRename={isOwner} onSaved={async () => { await refresh(); setNotice("Saved."); }} /> : <Skeleton className="h-6 w-48" />}
         {p && <Badge variant={old ? "neutral" : "success"}>{old ? `Viewing v${shown}` : `v${current}`}</Badge>}
         {p && !isOwner && <Badge>{ROLE_LABEL[p.role]}</Badge>}
+        {agentWorking && (
+          <span role="status" className="flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[12px] font-medium text-primary">
+            <Bot size={12} aria-hidden="true" /> Agent is working
+          </span>
+        )}
         <span className="flex-1" />
         {p && <PresenceRow
             pageId={id}
@@ -175,7 +217,7 @@ export default function PageViewer() {
         <AddAgentHint />
         {old && canEdit && (
           <Button size="sm" variant="secondary" onClick={() => shownVersion && setRollback(shownVersion)}>
-            <RotateCcw aria-hidden="true" /> Restore this version
+            <RotateCcw aria-hidden="true" /> <span className="hidden lg:inline">Restore this version</span><span className="sr-only lg:hidden">Restore this version</span>
           </Button>
         )}
         {old && (
@@ -183,23 +225,49 @@ export default function PageViewer() {
         )}
         {canEdit && (
           <Button size="sm" variant="secondary" onClick={() => setUploading(true)}>
-            <Upload aria-hidden="true" /> New version
+            <Upload aria-hidden="true" /> <span className="hidden lg:inline">New version</span><span className="sr-only lg:hidden">New version</span>
           </Button>
         )}
         {isOwner && (
           <Button size="sm" variant="secondary" onClick={() => setSharing(true)}>
-            <Share2 aria-hidden="true" /> Share
+            <Share2 aria-hidden="true" /> <span className="hidden lg:inline">Share</span><span className="sr-only lg:hidden">Share</span>
           </Button>
         )}
-        <Button size="sm" variant={showComments ? "default" : "secondary"} onClick={() => setShowComments((v) => !v)} aria-pressed={showComments}>
-          <MessageSquare aria-hidden="true" /> Comments
+        {canReact && (
+          <Button
+            size="sm"
+            variant={commentMode ? "default" : "secondary"}
+            onClick={() => setCommentMode((v) => !v)}
+            aria-pressed={commentMode}
+            title="Tap a part of the page to comment on it. Press Escape to stop."
+            className="touch-44"
+          >
+            <MessageSquarePlus aria-hidden="true" /> <span className="hidden lg:inline">Pin a comment</span>
+            <span className="sr-only lg:hidden">Pin a comment</span>
+          </Button>
+        )}
+        {othersHere && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setShareFocus(!shareFocus)}
+            aria-pressed={shareFocus}
+            title={shareFocus ? "Others can see which part you are on. Click to hide." : "Your place is hidden. Click to show it."}
+            className="touch-44"
+          >
+            {shareFocus ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
+            <span className="sr-only">{shareFocus ? "Hide my place from others" : "Show my place to others"}</span>
+          </Button>
+        )}
+        <Button size="sm" variant={showComments ? "default" : "secondary"} onClick={() => setShowComments((v) => !v)} aria-pressed={showComments} className="touch-44">
+          <MessageSquare aria-hidden="true" /> <span className="hidden lg:inline">Comments</span><span className="sr-only lg:hidden">Comments</span>
         </Button>
         <Button size="sm" variant="secondary" onClick={() => setNoting(true)}>
-          <BookOpen aria-hidden="true" /> Context{p?.context && <span className="sr-only"> (has notes)</span>}
+          <BookOpen aria-hidden="true" /> <span className="hidden lg:inline">Context</span><span className="sr-only lg:hidden">Context</span>{p?.context && <span className="sr-only"> (has notes)</span>}
           {p?.context && <span aria-hidden="true" className="size-1.5 rounded-full bg-signal" />}
         </Button>
         <Button size="sm" variant={showHistory ? "default" : "secondary"} onClick={() => setShowHistory((v) => !v)} aria-pressed={showHistory}>
-          <History aria-hidden="true" /> History
+          <History aria-hidden="true" /> <span className="hidden lg:inline">History</span><span className="sr-only lg:hidden">History</span>
         </Button>
         {view.data && (
           <a
@@ -223,7 +291,7 @@ export default function PageViewer() {
         )}
         {p && !isOwner && (
           <Button size="sm" variant="ghost" onClick={() => setLeaving(true)}>
-            <LogOut aria-hidden="true" /> Leave
+            <LogOut aria-hidden="true" /> <span className="hidden lg:inline">Leave</span><span className="sr-only lg:hidden">Leave</span>
           </Button>
         )}
       </div>
@@ -239,9 +307,18 @@ export default function PageViewer() {
               title={p ? `${p.title}, version ${shown}` : "Page"}
               marks={marks}
               focus={focus}
+              commentMode={commentMode}
+              shareFocus={shareFocus && othersHere}
+              peers={peers.peers}
+              reactions={reactions.items}
+              canReact={canReact}
+              onFocus={peers.send}
+              onReact={(block, key, on) => void reactions.react(block, key, on).catch((err: Error) => setNotice(err.message))}
+              onExitMode={() => setCommentMode(false)}
               onComment={(anchor) => {
                 setDraft(anchor);
                 setShowComments(true);
+                setCommentMode(false);
               }}
               onMark={(threadId) => {
                 setActiveThread(threadId);
