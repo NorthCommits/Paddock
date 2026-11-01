@@ -225,6 +225,28 @@ class PageMessage(Base):
     )
 
 
+class BlockReaction(Base):
+    """One person's reaction (like, love, cheer, eyes) to one part of a page.
+
+    `block` is the id the page helper gives a block of the page. It is a short content hash unless
+    the page sets its own `data-pd-id`, so it is only a label here and is never interpreted.
+    """
+
+    __tablename__ = "block_reactions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    page_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pages.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    block: Mapped[str] = mapped_column(String(64))
+    key: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = _now_column()
+
+    __table_args__ = (
+        UniqueConstraint("page_id", "user_id", "block", "key", name="uq_block_reactions_one"),
+        Index("ix_block_reactions_page_id", "page_id"),
+    )
+
+
 class PageInvite(Base):
     """An invitation sent to an email address. Only a hash of the token is stored."""
 

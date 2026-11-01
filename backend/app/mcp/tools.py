@@ -236,6 +236,12 @@ async def publish_page(
         message: A short note on what changed, shown in the version history.
         entry_path: The HTML file that opens first. Default "index.html".
 
+    Tip for pages you will revise: give each block people may comment on (a heading, paragraph,
+    list item, table cell or figure) a stable data-pd-id attribute, such as <p data-pd-id="intro">.
+    Comments and reactions stay on that block when you rewrite its words in a later version.
+    Keep an id when a block stays the same part of the page, and do not reuse an id for another one.
+    Without ids Paddock still anchors comments by the words and position, which is less exact.
+
     Returns {page_id, title, version, created, url}. created is false when the files were
     identical to the current version. Give the url to the person so they can open the page.
     """

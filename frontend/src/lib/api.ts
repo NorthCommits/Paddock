@@ -131,6 +131,7 @@ export type Anchor = {
   tag: string;
   quote: string;
   selector: string;
+  id?: string;
   selected?: string;
   section?: string;
 };
